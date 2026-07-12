@@ -1,16 +1,12 @@
 import './styles.css'
 import {
   firebaseConfigured,
-  finishMfaEnrollment,
-  finishSmsChallenge,
   inspectUserAccess,
   loginWithEmail,
   logout,
   observeAuth,
   resendVerificationEmail,
   requestPasswordReset,
-  startMfaEnrollment,
-  sendSmsChallenge,
 } from './firebase.js'
 import { apiFetch } from './api.js'
 
@@ -20,10 +16,8 @@ const state = {
   user: null,
   authContext: null,
   accessGate: null,
-  enrollment: null,
   devSession: null,
   page: 'dashboard',
-  mfa: null,
   simulation: null,
   loading: false,
   toast: null,
@@ -129,7 +123,7 @@ function loginView() {
               <button class="button button--secondary" data-action="dev-login">Acessar como Gerente</button>
             </div>
           ` : ''}
-          <p class="auth-help">Problemas com o e-mail ou o segundo fator por SMS? Entre em contato com o gerente responsável.</p>
+          <p class="auth-help">Problemas com o e-mail ou a senha? Entre em contato com o gerente responsável.</p>
         </div>
       </section>
     </main>
@@ -142,32 +136,15 @@ function onboardingView() {
   let content = ''
 
   if (gate.type === 'checking') {
-    content = `<div class="access-state"><span class="spinner"></span><h2>Validando seu acesso</h2><p>Estamos conferindo o e-mail, o perfil e o segundo fator.</p></div>`
+    content = `<div class="access-state"><span class="spinner"></span><h2>Validando seu acesso</h2><p>Estamos conferindo o e-mail e o perfil.</p></div>`
   } else if (gate.type === 'verify-email') {
     content = `
-      <div class="auth-card__heading"><p class="eyebrow">Etapa 1 de 2</p><h2>Confirme seu e-mail</h2><p>Enviaremos o link de verificação para <strong>${email}</strong>.</p></div>
+      <div class="auth-card__heading"><p class="eyebrow">Primeiro acesso</p><h2>Confirme seu e-mail</h2><p>Enviaremos o link de verificação para <strong>${email}</strong>.</p></div>
       <div class="form-stack">
         <button class="button button--primary" data-action="resend-verification">Enviar link de verificação</button>
         <button class="button button--secondary" data-action="refresh-access">Já confirmei o e-mail</button>
       </div>
     `
-  } else if (gate.type === 'enroll-mfa') {
-    content = state.enrollment ? `
-      <form id="enrollment-code-form" class="form-stack">
-        <div class="auth-card__heading"><p class="eyebrow">Etapa 2 de 2</p><h2>Confirme o SMS</h2><p>Digite o código enviado ao telefone informado.</p></div>
-        <label>Código de 6 dígitos<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus /></label>
-        <button class="button button--primary" type="submit">Concluir cadastro seguro</button>
-        <button class="button button--secondary" type="button" data-action="cancel-enrollment">Enviar para outro número</button>
-      </form>
-    ` : `
-      <form id="enrollment-phone-form" class="form-stack">
-        <div class="auth-card__heading"><p class="eyebrow">Etapa 2 de 2</p><h2>Proteja sua conta</h2><p>Cadastre o telefone que receberá o código obrigatório de acesso.</p></div>
-        <label>Celular internacional<input name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+5511999999999" pattern="[+][1-9][0-9]{7,14}" title="Use o formato internacional, por exemplo +5511999999999" required /></label>
-        <button class="button button--primary" type="submit">Enviar código por SMS</button>
-      </form>
-    `
-  } else if (gate.type === 'reauthenticate') {
-    content = `<div class="access-state"><span class="access-state__icon">✓</span><h2>Cadastro protegido</h2><p>O telefone foi confirmado. Entre novamente para concluir o primeiro acesso com os dois fatores.</p><button class="button button--primary" data-action="logout">Voltar ao login</button></div>`
   } else if (gate.type === 'missing-role') {
     content = `<div class="access-state"><span class="access-state__icon">!</span><h2>Perfil ainda não liberado</h2><p>Sua conta existe, mas o Gerente ainda precisa atribuir um perfil de acesso.</p><button class="button button--secondary" data-action="logout">Sair</button></div>`
   } else {
@@ -178,7 +155,7 @@ function onboardingView() {
     <main class="auth-shell">
       <section class="auth-story" aria-label="Cadastro seguro do Clube 3 Barbas">
         <div class="brand brand--light brand--hero"><img class="brand__logo" src="/assets/3barbas_logo.png" alt="3 Barbas — Visagismo e Barbearia" /></div>
-        <div class="auth-story__content"><p class="eyebrow">Primeiro acesso</p><h1>Uma conta.<br />Duas confirmações.</h1><p>E-mail verificado e SMS trabalham juntos para proteger os dados financeiros e operacionais do Clube.</p></div>
+        <div class="auth-story__content"><p class="eyebrow">Primeiro acesso</p><h1>Sua conta.<br />Seu acesso.</h1><p>Confirme seu e-mail para proteger os dados financeiros e operacionais do Clube.</p></div>
       </section>
       <section class="auth-panel"><div class="auth-card">${content}<p class="auth-help">A função de acesso não pode ser escolhida pelo usuário. Apenas um Gerente pode atribuí-la.</p></div></section>
     </main>
@@ -340,25 +317,10 @@ function appView() {
   `
 }
 
-function mfaModal() {
-  if (!state.mfa) return ''
-  return `
-    <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="mfa-title">
-      <form id="mfa-form" class="modal-card">
-        <p class="eyebrow">Segundo fator</p><h2 id="mfa-title">Confirme o código por SMS</h2>
-        <p>Enviamos um código para o telefone cadastrado. Esta validação é obrigatória para concluir o acesso.</p>
-        <label>Código de 6 dígitos<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus /></label>
-        <button class="button button--primary" type="submit">Confirmar acesso</button>
-        <button class="button button--secondary" type="button" data-action="cancel-mfa">Voltar ao login</button>
-      </form>
-    </div>
-  `
-}
-
 function render() {
   const hasAppAccess = Boolean(state.devSession || state.authContext?.ready)
   const mainView = hasAppAccess ? appView() : state.user ? onboardingView() : loginView()
-  root.innerHTML = `${mainView}${mfaModal()}${state.toast ? `<div class="toast toast--${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}`
+  root.innerHTML = `${mainView}${state.toast ? `<div class="toast toast--${state.toast.type}">${escapeHtml(state.toast.message)}</div>` : ''}`
   bindEvents()
 }
 
@@ -372,9 +334,6 @@ function bindEvents() {
   })
 
   document.querySelector('#login-form')?.addEventListener('submit', handleLogin)
-  document.querySelector('#mfa-form')?.addEventListener('submit', handleMfa)
-  document.querySelector('#enrollment-phone-form')?.addEventListener('submit', handleEnrollmentStart)
-  document.querySelector('#enrollment-code-form')?.addEventListener('submit', handleEnrollmentFinish)
   document.querySelector('#share-form')?.addEventListener('submit', handleShareSimulation)
 
   document.querySelectorAll('[data-field]').forEach((input) => {
@@ -393,13 +352,9 @@ function bindEvents() {
       refreshHealth()
     })
     if (action === 'logout') button.addEventListener('click', async () => {
-      state.enrollment?.recaptchaVerifier?.clear()
-      state.mfa?.recaptchaVerifier?.clear()
       state.devSession = null
       state.authContext = null
       state.accessGate = null
-      state.enrollment = null
-      state.mfa = null
       state.health = 'unknown'
       await logout()
       state.user = null
@@ -407,17 +362,6 @@ function bindEvents() {
     })
     if (action === 'resend-verification') button.addEventListener('click', handleResendVerification)
     if (action === 'refresh-access') button.addEventListener('click', () => evaluateUserAccess(state.user, true))
-    if (action === 'cancel-enrollment') button.addEventListener('click', () => {
-      state.enrollment?.recaptchaVerifier?.clear()
-      state.enrollment = null
-      render()
-    })
-    if (action === 'cancel-mfa') button.addEventListener('click', () => {
-      state.mfa?.recaptchaVerifier?.clear()
-      state.mfa = null
-      state.loading = false
-      render()
-    })
     if (action === 'forgot-password') button.addEventListener('click', handlePasswordReset)
     if (action === 'toggle-password') button.addEventListener('click', () => {
       const input = document.querySelector('input[name="password"]')
@@ -445,28 +389,9 @@ async function handleLogin(event) {
   state.loading = true
   render()
   try {
-    const result = await loginWithEmail(form.get('email'), form.get('password'))
-    if (result.requiresSecondFactor) {
-      const challenge = await sendSmsChallenge(result.resolver)
-      state.mfa = { resolver: result.resolver, ...challenge }
-      state.loading = false
-      render()
-    }
+    await loginWithEmail(form.get('email'), form.get('password'))
   } catch (error) {
     state.loading = false
-    setToast(authErrorMessage(error), 'error')
-  }
-}
-
-async function handleMfa(event) {
-  event.preventDefault()
-  const code = new FormData(event.currentTarget).get('code')
-  try {
-    await finishSmsChallenge(state.mfa.resolver, state.mfa.verificationId, code)
-    state.mfa.recaptchaVerifier.clear()
-    state.mfa = null
-    setToast('Acesso confirmado com os dois fatores.')
-  } catch (error) {
     setToast(authErrorMessage(error), 'error')
   }
 }
@@ -475,37 +400,6 @@ async function handleResendVerification() {
   try {
     await resendVerificationEmail(state.user)
     setToast('Link de verificação enviado. Confira também a caixa de spam.')
-  } catch (error) {
-    setToast(authErrorMessage(error), 'error')
-  }
-}
-
-async function handleEnrollmentStart(event) {
-  event.preventDefault()
-  const phone = new FormData(event.currentTarget).get('phone')
-  state.loading = true
-  try {
-    state.enrollment = await startMfaEnrollment(state.user, phone)
-    state.loading = false
-    render()
-  } catch (error) {
-    state.loading = false
-    setToast(authErrorMessage(error), 'error')
-  }
-}
-
-async function handleEnrollmentFinish(event) {
-  event.preventDefault()
-  const code = new FormData(event.currentTarget).get('code')
-  try {
-    await finishMfaEnrollment(state.user, state.enrollment.verificationId, code)
-    state.enrollment.recaptchaVerifier.clear()
-    state.enrollment = null
-    await logout()
-    state.user = null
-    state.authContext = null
-    state.accessGate = null
-    setToast('Telefone confirmado. Entre novamente para validar os dois fatores.')
   } catch (error) {
     setToast(authErrorMessage(error), 'error')
   }
@@ -524,10 +418,6 @@ async function evaluateUserAccess(user, forceRefresh = false) {
       state.accessGate = { type: 'missing-role' }
     } else if (!access.emailVerified) {
       state.accessGate = { type: 'verify-email' }
-    } else if (access.enrolledFactors.length === 0) {
-      state.accessGate = { type: 'enroll-mfa' }
-    } else if (!access.signedInWithSecondFactor) {
-      state.accessGate = { type: 'reauthenticate' }
     } else {
       state.accessGate = null
       state.authContext = { ready: true, role }
@@ -565,10 +455,6 @@ function authErrorMessage(error) {
     'auth/wrong-password': 'E-mail ou senha inválidos.',
     'auth/invalid-email': 'Informe um e-mail válido.',
     'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos e tente novamente.',
-    'auth/invalid-verification-code': 'O código informado é inválido.',
-    'auth/code-expired': 'O código expirou. Solicite um novo SMS.',
-    'auth/invalid-phone-number': 'Use um celular no formato internacional, como +5511999999999.',
-    'auth/quota-exceeded': 'A cota de SMS foi atingida. Entre em contato com o responsável.',
     'auth/requires-recent-login': 'Entre novamente para concluir esta operação.',
   }
   return messages[error?.code] || error?.message || 'Não foi possível concluir a autenticação.'
@@ -582,10 +468,10 @@ async function handlePasswordReset() {
   }
   try {
     await requestPasswordReset(email)
-    setToast('Se a conta existir, o link foi enviado. O SMS será exigido no próximo acesso.')
+    setToast('Se a conta existir, o link de recuperação foi enviado.')
   } catch (error) {
     if (error?.code === 'auth/user-not-found') {
-      setToast('Se a conta existir, o link foi enviado. O SMS será exigido no próximo acesso.')
+      setToast('Se a conta existir, o link de recuperação foi enviado.')
     } else {
       setToast(authErrorMessage(error), 'error')
     }
@@ -622,7 +508,6 @@ observeAuth((user) => {
   state.user = user
   state.loading = false
   state.authContext = null
-  state.enrollment = null
   if (user) {
     evaluateUserAccess(user)
   } else {

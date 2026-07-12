@@ -36,12 +36,10 @@ O **assinante** é um cliente do clube e não uma conta autenticada do portal.
 
 ### Acesso
 
-1. Usuário convidado confirma e-mail, senha e telefone.
-2. E-mail/senha formam o primeiro fator.
-3. SMS cadastrado forma o segundo fator obrigatório.
-4. O token enviado à API contém o perfil em custom claim.
-5. Recuperação envia link ao e-mail; o novo acesso ainda exige o SMS.
-6. Perda do segundo fator exige procedimento administrativo auditado.
+1. Usuário convidado confirma e-mail e define sua senha.
+2. E-mail/senha formam o método de autenticação.
+3. O token enviado à API contém o perfil em custom claim.
+4. Recuperação envia link ao e-mail para definição de uma nova senha.
 
 O perfil nunca é escolhido num cadastro público. Apenas Gerente convida usuários e atribui perfil.
 

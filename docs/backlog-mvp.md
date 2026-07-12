@@ -5,8 +5,8 @@
 - [x] Arquitetura Hosting + Cloud Run.
 - [x] Projeto Spring Boot Java 21.
 - [x] Autenticação por ID Token e RBAC base.
-- [x] Portal responsivo com login, MFA e navegação.
-- [x] Primeiro acesso com confirmação de e-mail e inscrição SMS MFA.
+- [x] Portal responsivo com login e navegação.
+- [x] Primeiro acesso com confirmação de e-mail.
 - [x] Provisionamento administrativo inicial e menus filtrados por perfil.
 - [x] Regra de rateio e testes automatizados.
 - [x] Política de status do assinante.
@@ -37,10 +37,9 @@
 
 - [x] Provisionamento seguro do primeiro Gerente por comando administrativo.
 - [x] Custom claim de função no Auth.
-- [x] Inscrição obrigatória no SMS MFA durante o primeiro acesso.
+- [x] Verificação obrigatória do e-mail durante o primeiro acesso.
 - [ ] Convite de equipe pela interface do Gerente.
 - [ ] Sincronização do perfil complementar em `users/{uid}`.
-- [ ] Procedimento auditado para perda de segundo fator.
 - [ ] Gestão de equipe e revogação de sessões.
 - [ ] Testes de permissão por endpoint e perfil.
 

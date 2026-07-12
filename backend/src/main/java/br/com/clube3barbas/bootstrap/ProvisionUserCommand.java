@@ -44,7 +44,7 @@ public final class ProvisionUserCommand {
 
             System.out.printf("Usuario provisionado: uid=%s, email=%s, perfil=%s%n", user.getUid(), email, role);
             System.out.println("Sessoes anteriores foram revogadas para aplicar o perfil imediatamente.");
-            System.out.println("Novo usuario: use 'Esqueci minha senha', confirme o e-mail e cadastre o SMS MFA.");
+            System.out.println("Novo usuario: use 'Esqueci minha senha' e confirme o e-mail.");
         } finally {
             app.delete();
         }

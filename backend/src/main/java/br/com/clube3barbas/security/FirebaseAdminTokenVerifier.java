@@ -11,14 +11,9 @@ import org.springframework.stereotype.Component;
 public class FirebaseAdminTokenVerifier implements FirebaseTokenVerifier {
 
     private final FirebaseAuth firebaseAuth;
-    private final boolean requireMfa;
 
-    public FirebaseAdminTokenVerifier(
-            FirebaseAuth firebaseAuth,
-            br.com.clube3barbas.config.FirebaseProperties properties
-    ) {
+    public FirebaseAdminTokenVerifier(FirebaseAuth firebaseAuth) {
         this.firebaseAuth = firebaseAuth;
-        this.requireMfa = properties.requireMfa();
     }
 
     @Override
@@ -28,23 +23,11 @@ public class FirebaseAdminTokenVerifier implements FirebaseTokenVerifier {
             if (!decoded.isEmailVerified()) {
                 throw new IllegalArgumentException("E-mail ainda nao verificado.");
             }
-            if (requireMfa && !possuiSegundoFator(decoded.getClaims())) {
-                throw new IllegalArgumentException("Segundo fator nao confirmado nesta sessao.");
-            }
             var perfil = PerfilUsuario.fromClaim(decoded.getClaims().get("role"));
             var nome = decoded.getName() == null ? decoded.getUid() : decoded.getName();
             return new UsuarioAutenticado(decoded.getUid(), nome, decoded.getEmail(), perfil);
         } catch (FirebaseAuthException | IllegalArgumentException exception) {
             throw new TokenInvalidoException("Token Firebase invalido ou revogado.", exception);
         }
-    }
-
-    static boolean possuiSegundoFator(java.util.Map<String, Object> claims) {
-        var firebaseClaim = claims.get("firebase");
-        if (!(firebaseClaim instanceof java.util.Map<?, ?> firebase)) {
-            return false;
-        }
-        var segundoFator = firebase.get("sign_in_second_factor");
-        return segundoFator != null && !segundoFator.toString().isBlank();
     }
 }

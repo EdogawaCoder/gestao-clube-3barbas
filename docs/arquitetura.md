@@ -21,9 +21,9 @@ O Hosting tem limite de 60 segundos para conteúdo dinâmico. Relatórios grande
 
 ## Autenticação
 
-- Firebase Authentication with Identity Platform.
-- E-mail/senha como primeiro fator e SMS MFA obrigatório.
-- E-mail verificado antes de cadastrar MFA.
+- Firebase Authentication.
+- E-mail/senha como método de autenticação.
+- E-mail verificado antes de liberar o acesso.
 - Telefones em E.164.
 - `role` em custom claim: `GERENTE`, `ADMINISTRATIVO` ou `BARBEIRO`.
 - A API também exige e-mail verificado e `firebase.sign_in_second_factor` no ID Token.
@@ -31,7 +31,7 @@ O Hosting tem limite de 60 segundos para conteúdo dinâmico. Relatórios grande
 - Ao desativar usuário: desabilitar conta, revogar refresh tokens e preservar histórico.
 - Firebase Auth (`disabled` + revogação) é a fonte autoritativa de bloqueio; `users/{uid}` é a projeção operacional reconciliada.
 
-O reset padrão envia um link por e-mail. Depois da troca, o login continua exigindo o segundo fator por SMS; assim o acesso à conta depende das duas validações. O procedimento administrativo para perda de telefone precisa ser manual e auditado.
+O reset padrão envia um link por e-mail. Depois da troca, o usuário entra com a nova senha e o acesso permanece condicionado à verificação do e-mail e ao perfil atribuído.
 
 ## Autorização
 
