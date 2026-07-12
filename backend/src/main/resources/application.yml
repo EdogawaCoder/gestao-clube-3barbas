@@ -1,0 +1,30 @@
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
+  error:
+    include-message: never
+    include-stacktrace: never
+
+spring:
+  application:
+    name: clube-3-barbas-api
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  security:
+    development-auth-enabled: ${DEVELOPMENT_AUTH_ENABLED:false}
+  firebase:
+    enabled: ${FIREBASE_ENABLED:true}
+    project-id: ${GOOGLE_CLOUD_PROJECT:}
+    require-mfa: ${FIREBASE_REQUIRE_MFA:true}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5000}

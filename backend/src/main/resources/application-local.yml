@@ -1,0 +1,5 @@
+app:
+  security:
+    development-auth-enabled: true
+  firebase:
+    enabled: false

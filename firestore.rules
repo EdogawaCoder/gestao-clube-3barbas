@@ -1,0 +1,12 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Os dados de negócio são acessados exclusivamente pela API Java.
+    // O Admin SDK usa IAM e não depende destas regras.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
