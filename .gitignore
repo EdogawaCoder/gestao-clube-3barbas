@@ -16,6 +16,7 @@ web/dist/
 .env.*
 !.env.example
 service-account*.json
+*firebase-adminsdk*.json
 firebase-debug.log
 firestore-debug.log
 ui-debug.log

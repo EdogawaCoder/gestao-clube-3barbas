@@ -20,7 +20,7 @@ O Firebase Hosting não executa uma JVM. Por isso, os arquivos do portal ficam n
 
 - Java 21 e Spring Boot 4.1
 - Firebase Admin SDK para Java
-- Firebase Authentication com Identity Platform e MFA por SMS
+- Firebase Authentication por e-mail e senha
 - Cloud Firestore
 - Vite 8 e Firebase Web SDK
 - Maven, JUnit 5 e AssertJ
@@ -29,12 +29,12 @@ O Firebase Hosting não executa uma JVM. Por isso, os arquivos do portal ficam n
 
 - Estrutura de produção para Hosting + Cloud Run.
 - Autenticação por Firebase ID Token e RBAC por custom claim `role`.
-- E-mail verificado, inscrição no SMS MFA e exigência do segundo fator também na API.
+- E-mail verificado e perfil de acesso exigidos também na API.
 - Provisionamento administrativo do primeiro Gerente e dos demais usuários.
 - Modo local isolado: cabeçalhos `X-Dev-*` são recusados fora do profile `local` e no Cloud Run.
 - Simulação de rateio 60/40 com distribuição determinística dos centavos.
 - Política de status ATIVO/PENDENTE/CANCELADO/EXCLUÍDO.
-- Tela de login, primeiro acesso, recuperação, MFA, menus por perfil, health real, dashboard e simulador.
+- Tela de login, primeiro acesso, recuperação, menus por perfil, health real, dashboard e simulador.
 - Firestore fechado para acesso direto do navegador.
 - Modelo de dados, requisitos, backlog e decisões em `docs/`.
 
@@ -82,7 +82,7 @@ npm run build:preview
 No projeto Firebase/Google Cloud:
 
 1. Atualize o Firebase Authentication para **Authentication with Identity Platform**.
-2. Habilite E-mail/Senha, SMS MFA e as regiões de SMS necessárias.
+2. Habilite E-mail/Senha.
 3. Crie um aplicativo Web e copie `web/.env.example` para `web/.env`, preenchendo os valores públicos.
 4. Configure os domínios autorizados e o modelo de e-mail de verificação.
 5. Para usar o Admin SDK localmente, crie um OAuth Client do tipo **Desktop** e execute `gcloud auth application-default login --client-id-file='C:\caminho\oauth-desktop.json'`. O client ID padrão do `gcloud` não é aceito pelo Firebase Authentication.
@@ -100,9 +100,25 @@ cd backend
 mvn -B -ntp exec:java '-Dexec.mainClass=br.com.clube3barbas.bootstrap.ProvisionUserCommand'
 ```
 
-O comando cria uma senha aleatória que não é exibida. O novo usuário começa por **Esqueci minha senha**, define sua própria senha, entra no portal, confirma o e-mail e cadastra o celular em E.164. Depois da inscrição, o portal encerra a sessão para que o próximo login já exija o SMS. Perfis aceitos: `GERENTE`, `ADMINISTRATIVO` e `BARBEIRO`. Em usuário existente, o comando atualiza o claim e revoga as sessões antigas para a mudança valer imediatamente.
+O comando cria uma senha aleatória que não é exibida. O novo usuário começa por **Esqueci minha senha**, define sua própria senha, entra no portal e confirma o e-mail. Perfis aceitos: `GERENTE`, `ADMINISTRATIVO` e `BARBEIRO`. Em usuário existente, o comando atualiza o claim e revoga as sessões antigas para a mudança valer imediatamente.
 
 O uso local acima segue a configuração especial exigida pelo [Firebase Admin SDK com credenciais de usuário final](https://firebase.google.com/docs/admin/setup#testing_with_gcloud_end_user_credentials). Em produção, use sempre a identidade de serviço do Cloud Run; não distribua chaves JSON de service account.
+
+## Usar o Render em vez do Cloud Run
+
+O `Dockerfile` na raiz do repositório permite hospedar a API em qualquer serviço baseado em contêiner, incluindo o [Render](https://render.com) — útil para evitar a exigência de faturamento habilitado que o Cloud Run impõe. O Firestore continua funcionando normalmente nesse cenário e continua gratuito no plano Spark do Firebase; a diferença é que, fora do Cloud Run, não existe identidade automática (Application Default Credentials), então a API precisa receber explicitamente uma chave de conta de serviço:
+
+1. No [Console do Firebase](https://console.firebase.google.com), abra o projeto → **Configurações do projeto** → **Contas de serviço** → **Gerar nova chave privada**. Isso baixa um arquivo JSON.
+2. Confirme que existe um banco **Cloud Firestore** criado no projeto (Build → Firestore Database → Criar banco de dados, modo Nativo).
+3. No painel do serviço no Render: **Environment → Secret Files** → adicione um arquivo (por exemplo `firebase-service-account.json`) colando o conteúdo do JSON baixado. O Render monta esse arquivo em `/etc/secrets/firebase-service-account.json`.
+4. Ainda em **Environment → Environment Variables**, adicione:
+   - `GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/firebase-service-account.json`
+   - `GOOGLE_CLOUD_PROJECT=<SEU_FIREBASE_PROJECT_ID>`
+   - `FIREBASE_ENABLED=true`
+5. Salve; o Render reimplanta automaticamente.
+6. Verifique acessando `https://<seu-servico>.onrender.com/api/v1/health/firestore`: `{"firestore":"UP"}` confirma a credencial e o banco; `"DOWN"` indica problema de credencial ou banco ainda não criado; `"DISABLED"` indica que `FIREBASE_ENABLED` não está `true`.
+
+Nunca commite a chave JSON baixada no repositório — ela concede acesso administrativo ao projeto inteiro.
 
 ## Publicação
 
@@ -117,7 +133,7 @@ gcloud iam service-accounts create clube-3-barbas-api --project $projectId --dis
 gcloud projects add-iam-policy-binding $projectId --member "serviceAccount:$serviceAccount" --role roles/firebaseauth.admin
 gcloud projects add-iam-policy-binding $projectId --member "serviceAccount:$serviceAccount" --role roles/datastore.user
 
-gcloud run deploy clube-3-barbas-api --project $projectId --source backend --region southamerica-east1 --service-account $serviceAccount --allow-unauthenticated --set-env-vars FIREBASE_ENABLED=true,FIREBASE_REQUIRE_MFA=true
+gcloud run deploy clube-3-barbas-api --project $projectId --source backend --region southamerica-east1 --service-account $serviceAccount --allow-unauthenticated --set-env-vars FIREBASE_ENABLED=true
 
 cd web
 npm ci
@@ -136,4 +152,5 @@ Usar o mesmo `$projectId` nos dois CLIs evita publicar o Hosting e o Cloud Run e
 - [Backlog do MVP](docs/backlog-mvp.md)
 - [Decisões pendentes](docs/decisoes-pendentes.md)
 
-Referências técnicas oficiais: [Firebase Hosting com Cloud Run](https://firebase.google.com/docs/hosting/cloud-run), [Admin SDK Java](https://firebase.google.com/docs/admin/setup), [MFA por SMS](https://firebase.google.com/docs/auth/web/multi-factor) e [Spring Boot](https://docs.spring.io/spring-boot/system-requirements.html).
+Referências técnicas oficiais: [Firebase Hosting com Cloud Run](https://firebase.google.com/docs/hosting/cloud-run), [Admin SDK Java](https://firebase.google.com/docs/admin/setup), [Firebase Authentication](https://firebase.google.com/docs/auth) e [Spring Boot](https://docs.spring.io/spring-boot/system-requirements.html).
+# gestao-clube-3barbas
