@@ -18,15 +18,22 @@ const state = {
   accessGate: null,
   devSession: null,
   page: 'dashboard',
-  simulation: null,
   loading: false,
   toast: null,
   health: 'unknown',
-  attendances: [
-    { barberId: 'barbeiro-1', barberName: 'Barbeiro 1' },
-    { barberId: 'barbeiro-2', barberName: 'Barbeiro 2' },
-    { barberId: 'barbeiro-1', barberName: 'Barbeiro 1' },
-  ],
+  // Gestão do Clube: assinantes e barbeiros já cadastrados, e o rateio calculado
+  // a partir dos atendimentos reais (não é mais um simulador com dados soltos).
+  clube: {
+    carregado: false,
+    assinantes: [],
+    barbeiros: [],
+    assinanteSelecionadoId: '',
+    atendimentos: [],
+    resultado: null,
+    calculando: false,
+    mostrarNovoAssinante: false,
+    mostrarNovoBarbeiro: false,
+  },
 }
 
 const menu = [
@@ -187,11 +194,11 @@ function dashboardView() {
     <section class="dashboard-grid">
       <article class="panel panel--feature">
         <div>
-          <p class="eyebrow">Primeira entrega funcional</p>
-          <h2>Rateio proporcional por atendimento</h2>
-          <p>Valide os exemplos de 60/40 e acompanhe a distribuição exata dos centavos.</p>
+          <p class="eyebrow">Rateio real</p>
+          <h2>Quem atendeu, quanto recebe</h2>
+          <p>Escolha um assinante, registre a visita e acompanhe a divisão 60/40 entre gerência e barbeiros.</p>
         </div>
-        <button class="button button--light" data-page="clube">Abrir simulador</button>
+        <button class="button button--light" data-page="clube">Abrir Gestão do Clube</button>
       </article>
       <article class="panel">
         <div class="panel__heading">
@@ -212,52 +219,97 @@ function metricCard(label, value, detail, icon) {
 }
 
 function clubView() {
-  const result = state.simulation
+  const clube = state.clube
+  const assinanteId = clube.assinanteSelecionadoId
+  const assinanteSelecionado = assinanteId && assinanteId !== 'todos'
+    ? clube.assinantes.find((item) => item.id === assinanteId)
+    : null
+
   return `
     <header class="page-heading">
-      <div><p class="eyebrow">Configuração financeira</p><h1>Gestão do Clube</h1><p>Visualize a regra e simule a divisão de uma assinatura.</p></div>
-      <span class="role-badge">Simulação disponível para a equipe</span>
+      <div><p class="eyebrow">Rateio real</p><h1>Gestão do Clube</h1><p>Escolha o assinante, registre quem atendeu, e veja quanto cada barbeiro deve receber.</p></div>
     </header>
     <section class="club-layout">
-      <form id="share-form" class="panel share-form">
+      <div class="panel share-form">
         <div class="panel__heading">
-          <div><p class="eyebrow">Plano de exemplo</p><h2>Simulador de rateio</h2></div>
-          <span class="tag">Ciclo de 30 dias</span>
+          <div><p class="eyebrow">Assinante</p><h2>Quem foi atendido</h2></div>
         </div>
-        <div class="form-grid form-grid--three">
-          <label>Mensalidade (R$)<input name="planValue" inputmode="decimal" value="200.00" required /></label>
-          <label>Gerência (%)<input name="managerPercentage" inputmode="decimal" value="60" required /></label>
-          <label>Barbeiros (%)<input name="barberPercentage" inputmode="decimal" value="40" required /></label>
+        <div class="form-grid">
+          <label>Assinante do clube
+            <select id="assinante-select">
+              <option value="">Selecione um assinante…</option>
+              <option value="todos" ${assinanteId === 'todos' ? 'selected' : ''}>Todos os assinantes já atendidos</option>
+              ${clube.assinantes.map((item) => `
+                <option value="${item.id}" ${assinanteId === item.id ? 'selected' : ''}>${escapeHtml(item.nome)}</option>
+              `).join('')}
+            </select>
+          </label>
         </div>
-        <div class="section-title"><div><h3>Atendimentos no ciclo</h3><p>Cada linha representa uma visita válida.</p></div><button type="button" class="button button--secondary button--small" data-action="add-attendance">+ Atendimento</button></div>
-        <div class="attendance-list">
-          ${state.attendances.map((item, index) => `
-            <div class="attendance-row">
-              <span>${String(index + 1).padStart(2, '0')}</span>
-              <label>ID<input data-field="barberId" data-index="${index}" value="${escapeHtml(item.barberId)}" required /></label>
-              <label>Barbeiro<input data-field="barberName" data-index="${index}" value="${escapeHtml(item.barberName)}" required /></label>
-              <button type="button" class="icon-button" data-action="remove-attendance" data-index="${index}" aria-label="Remover atendimento">×</button>
-            </div>
-          `).join('') || '<p class="empty-state">Nenhum atendimento: o fundo ficará não alocado.</p>'}
-        </div>
-        <button class="button button--primary" type="submit" ${state.loading ? 'disabled' : ''}>${state.loading ? 'Calculando…' : 'Calcular distribuição'}</button>
-      </form>
+        <button type="button" class="link-button" data-action="toggle-novo-assinante">
+          ${clube.mostrarNovoAssinante ? '– Cancelar novo assinante' : '+ Novo assinante'}
+        </button>
+        ${clube.mostrarNovoAssinante ? `
+          <form id="novo-assinante-form" class="form-grid form-grid--three attendance-row" style="grid-template-columns: 2fr 1fr 1fr 1fr auto; margin-top: 10px;">
+            <label>Nome do assinante<input name="nome" required /></label>
+            <label>Plano (R$)<input name="valorPlano" inputmode="decimal" value="200.00" required /></label>
+            <label>Gerência (%)<input name="percentualGerencia" inputmode="decimal" value="60" required /></label>
+            <label>Barbeiros (%)<input name="percentualBarbeiros" inputmode="decimal" value="40" required /></label>
+            <button class="button button--primary button--small" type="submit" style="align-self: end;">Cadastrar</button>
+          </form>
+        ` : ''}
+
+        ${assinanteId && assinanteId !== 'todos' ? `
+          <div class="section-title">
+            <div><h3>Atendimentos${assinanteSelecionado ? ` de ${escapeHtml(assinanteSelecionado.nome)}` : ''}</h3><p>Cada linha é uma visita já registrada.</p></div>
+          </div>
+          <form id="novo-atendimento-form" class="attendance-row" style="grid-template-columns: 1fr auto;">
+            <label>Barbeiro que atendeu
+              <select name="barbeiroId" required>
+                <option value="">Selecione…</option>
+                ${clube.barbeiros.map((barbeiro) => `<option value="${barbeiro.id}">${escapeHtml(barbeiro.nome)}</option>`).join('')}
+              </select>
+            </label>
+            <button class="button button--primary button--small" type="submit" style="align-self: end;">Registrar visita</button>
+          </form>
+         
+          ${clube.mostrarNovoBarbeiro ? `
+            <form id="novo-barbeiro-form" class="attendance-row" style="grid-template-columns: 1fr auto;">
+              <label>Nome do barbeiro<input name="nome" required /></label>
+              <button class="button button--secondary button--small" type="submit" style="align-self: end;">Cadastrar</button>
+            </form>
+          ` : ''}
+          <div class="attendance-list" style="margin-top: 16px;">
+            ${clube.atendimentos.map((item) => `
+              <div class="allocation-item">
+                <div class="avatar">${escapeHtml(item.barbeiroNome).slice(0, 1)}</div>
+                <div><strong>${escapeHtml(item.barbeiroNome)}</strong><small>${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(item.dataHora))}</small></div>
+                <button type="button" class="icon-button" data-action="remover-atendimento" data-atendimento-id="${item.id}" aria-label="Remover atendimento" title="Remover atendimento lançado errado">×</button>
+              </div>
+            `).join('') || '<p class="empty-state">Nenhuma visita registrada ainda para este assinante.</p>'}
+          </div>
+        ` : ''}
+        ${!assinanteId ? '<p class="empty-state" style="margin-top: 16px;">Selecione um assinante (ou "Todos") para ver e registrar atendimentos.</p>' : ''}
+      </div>
       <aside class="panel result-panel">
-        <div class="panel__heading"><div><p class="eyebrow">Resultado</p><h2>Fechamento previsto</h2></div></div>
-        ${result ? resultView(result) : '<div class="result-placeholder"><span>40%</span><p>Preencha os atendimentos e calcule para visualizar o rateio.</p></div>'}
+        <div class="panel__heading"><div><p class="eyebrow">Resultado</p><h2>Quanto pagar aos barbeiros</h2></div></div>
+        ${clube.calculando
+          ? '<div class="result-placeholder"><span class="spinner"></span><p>Calculando…</p></div>'
+          : clube.resultado
+            ? (assinanteId === 'todos' ? resultadoGeralView(clube.resultado) : resultadoAssinanteView(clube.resultado))
+            : '<div class="result-placeholder"><span>40%</span><p>Selecione um assinante para ver a divisão entre os barbeiros.</p></div>'}
       </aside>
     </section>
   `
 }
 
-function resultView(result) {
+function resultadoAssinanteView(result) {
   return `
     <div class="result-summary">
       <div><span>Valor do plano</span><strong>${money(result.valorPlano)}</strong></div>
       <div><span>Parcela gerencial</span><strong>${money(result.valorGerencia)}</strong><small>${result.percentualGerencia}%</small></div>
       <div><span>Fundo dos barbeiros</span><strong>${money(result.fundoBarbeiros)}</strong><small>${result.percentualBarbeiros}%</small></div>
     </div>
-    ${Number(result.valorNaoAlocado) > 0 ? `<div class="warning-note"><strong>${money(result.valorNaoAlocado)} não alocados</strong><span>O ciclo ainda não possui atendimentos válidos.</span></div>` : ''}
+    ${Number(result.valorNaoAlocado) > 0 ? `<div class="warning-note"><strong>${money(result.valorNaoAlocado)} não alocados</strong><span>Este assinante ainda não tem atendimentos registrados.</span></div>` : ''}
     <div class="allocation-list">
       ${result.parcelas.map((item) => `
         <div class="allocation-item">
@@ -267,7 +319,26 @@ function resultView(result) {
         </div>
       `).join('')}
     </div>
-    <div class="balance-check"><span>Conferência do total</span><strong>✓ Sem diferença de centavos</strong></div>
+  `
+}
+
+function resultadoGeralView(result) {
+  return `
+    <div class="result-summary">
+      <div><span>Assinantes já atendidos</span><strong>${result.totalAssinantesAtendidos}</strong></div>
+      <div><span>Total pago em planos</span><strong>${money(result.valorTotalPlanos)}</strong></div>
+      <div><span>Total da gerência</span><strong>${money(result.valorTotalGerencia)}</strong></div>
+      <div><span>Total dos barbeiros</span><strong>${money(result.valorTotalBarbeiros)}</strong></div>
+    </div>
+    <div class="allocation-list">
+      ${result.parcelas.map((item) => `
+        <div class="allocation-item">
+          <div class="avatar">${escapeHtml(item.barbeiroNome).slice(0, 1)}</div>
+          <div><strong>${escapeHtml(item.barbeiroNome)}</strong><small>${item.quantidadeAtendimentos} atendimento(s) no total</small></div>
+          <span>${money(item.valor)}</span>
+        </div>
+      `).join('') || '<p class="empty-state">Nenhum assinante atendido ainda.</p>'}
+    </div>
   `
 }
 
@@ -330,18 +401,22 @@ function bindEvents() {
       state.page = button.dataset.page
       document.querySelector('.sidebar')?.classList.remove('is-open')
       render()
+      if (state.page === 'clube' && !state.clube.carregado) {
+        carregarDadosDoClube()
+      }
     })
   })
 
   document.querySelector('#login-form')?.addEventListener('submit', handleLogin)
-  document.querySelector('#share-form')?.addEventListener('submit', handleShareSimulation)
+  document.querySelector('#novo-assinante-form')?.addEventListener('submit', handleNovoAssinante)
+  document.querySelector('#novo-barbeiro-form')?.addEventListener('submit', handleNovoBarbeiro)
+  document.querySelector('#novo-atendimento-form')?.addEventListener('submit', handleNovoAtendimento)
 
-  document.querySelectorAll('[data-field]').forEach((input) => {
-    input.addEventListener('input', () => {
-      const index = Number(input.dataset.index)
-      const key = input.dataset.field === 'barberId' ? 'barberId' : 'barberName'
-      state.attendances[index][key] = input.value
-    })
+  document.querySelector('#assinante-select')?.addEventListener('change', (event) => {
+    state.clube.assinanteSelecionadoId = event.target.value
+    state.clube.mostrarNovoBarbeiro = false
+    render()
+    carregarAtendimentosEDivisao()
   })
 
   document.querySelectorAll('[data-action]').forEach((button) => {
@@ -368,14 +443,16 @@ function bindEvents() {
       input.type = input.type === 'password' ? 'text' : 'password'
       button.textContent = input.type === 'password' ? 'Ver' : 'Ocultar'
     })
-    if (action === 'add-attendance') button.addEventListener('click', () => {
-      state.attendances.push({ barberId: '', barberName: '' })
+    if (action === 'toggle-novo-assinante') button.addEventListener('click', () => {
+      state.clube.mostrarNovoAssinante = !state.clube.mostrarNovoAssinante
       render()
     })
-    if (action === 'remove-attendance') button.addEventListener('click', () => {
-      state.attendances.splice(Number(button.dataset.index), 1)
-      state.simulation = null
+    if (action === 'toggle-novo-barbeiro') button.addEventListener('click', () => {
+      state.clube.mostrarNovoBarbeiro = !state.clube.mostrarNovoBarbeiro
       render()
+    })
+    if (action === 'remover-atendimento') button.addEventListener('click', () => {
+      handleRemoverAtendimento(button.dataset.atendimentoId)
     })
     if (action === 'toggle-menu') button.addEventListener('click', () => {
       document.querySelector('.sidebar')?.classList.toggle('is-open')
@@ -478,28 +555,120 @@ async function handlePasswordReset() {
   }
 }
 
-async function handleShareSimulation(event) {
-  event.preventDefault()
-  const form = new FormData(event.currentTarget)
-  state.loading = true
-  render()
+async function carregarDadosDoClube() {
   try {
-    state.simulation = await apiFetch('/api/v1/rateios/simular', {
-      method: 'POST',
-      body: JSON.stringify({
-        valorPlano: form.get('planValue'),
-        percentualGerencia: form.get('managerPercentage'),
-        percentualBarbeiros: form.get('barberPercentage'),
-        atendimentos: state.attendances.map(({ barberId, barberName }) => ({
-          barbeiroId: barberId,
-          barbeiroNome: barberName,
-        })),
-      }),
-    }, state.devSession)
-    state.loading = false
+    const [assinantes, barbeiros] = await Promise.all([
+      apiFetch('/api/v1/assinantes', {}, state.devSession),
+      apiFetch('/api/v1/barbeiros', {}, state.devSession),
+    ])
+    state.clube.assinantes = assinantes
+    state.clube.barbeiros = barbeiros
+    state.clube.carregado = true
     render()
   } catch (error) {
-    state.loading = false
+    setToast(error.message, 'error')
+  }
+}
+
+async function carregarAtendimentosEDivisao() {
+  const clube = state.clube
+  const assinanteId = clube.assinanteSelecionadoId
+  if (!assinanteId) {
+    clube.atendimentos = []
+    clube.resultado = null
+    render()
+    return
+  }
+
+  clube.calculando = true
+  render()
+  try {
+    if (assinanteId === 'todos') {
+      clube.atendimentos = []
+      clube.resultado = await apiFetch('/api/v1/rateios/geral', {}, state.devSession)
+    } else {
+      const [atendimentos, resultado] = await Promise.all([
+        apiFetch(`/api/v1/assinantes/${assinanteId}/atendimentos`, {}, state.devSession),
+        apiFetch(`/api/v1/rateios/assinantes/${assinanteId}`, {}, state.devSession),
+      ])
+      clube.atendimentos = atendimentos
+      clube.resultado = resultado
+    }
+  } catch (error) {
+    setToast(error.message, 'error')
+  } finally {
+    clube.calculando = false
+    render()
+  }
+}
+
+async function handleNovoAssinante(event) {
+  event.preventDefault()
+  const form = new FormData(event.currentTarget)
+  try {
+    const assinante = await apiFetch('/api/v1/assinantes', {
+      method: 'POST',
+      body: JSON.stringify({
+        nome: form.get('nome'),
+        valorPlano: form.get('valorPlano'),
+        percentualGerencia: form.get('percentualGerencia'),
+        percentualBarbeiros: form.get('percentualBarbeiros'),
+      }),
+    }, state.devSession)
+    state.clube.assinantes.push(assinante)
+    state.clube.mostrarNovoAssinante = false
+    state.clube.assinanteSelecionadoId = assinante.id
+    render()
+    setToast(`${assinante.nome} cadastrado.`)
+    carregarAtendimentosEDivisao()
+  } catch (error) {
+    setToast(error.message, 'error')
+  }
+}
+
+async function handleNovoBarbeiro(event) {
+  event.preventDefault()
+  const form = new FormData(event.currentTarget)
+  try {
+    const barbeiro = await apiFetch('/api/v1/barbeiros', {
+      method: 'POST',
+      body: JSON.stringify({ nome: form.get('nome') }),
+    }, state.devSession)
+    state.clube.barbeiros.push(barbeiro)
+    state.clube.mostrarNovoBarbeiro = false
+    render()
+    setToast(`${barbeiro.nome} cadastrado na equipe.`)
+  } catch (error) {
+    setToast(error.message, 'error')
+  }
+}
+
+async function handleNovoAtendimento(event) {
+  event.preventDefault()
+  const form = new FormData(event.currentTarget)
+  const assinanteId = state.clube.assinanteSelecionadoId
+  try {
+    await apiFetch(`/api/v1/assinantes/${assinanteId}/atendimentos`, {
+      method: 'POST',
+      body: JSON.stringify({ barbeiroId: form.get('barbeiroId') }),
+    }, state.devSession)
+    setToast('Atendimento registrado.')
+    carregarAtendimentosEDivisao()
+  } catch (error) {
+    setToast(error.message, 'error')
+  }
+}
+
+async function handleRemoverAtendimento(atendimentoId) {
+  const assinanteId = state.clube.assinanteSelecionadoId
+  if (!assinanteId || assinanteId === 'todos') return
+  try {
+    await apiFetch(`/api/v1/assinantes/${assinanteId}/atendimentos/${atendimentoId}`, {
+      method: 'DELETE',
+    }, state.devSession)
+    setToast('Atendimento removido.')
+    carregarAtendimentosEDivisao()
+  } catch (error) {
     setToast(error.message, 'error')
   }
 }
