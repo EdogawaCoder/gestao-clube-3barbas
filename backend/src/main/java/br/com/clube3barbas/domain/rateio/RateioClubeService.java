@@ -1,5 +1,6 @@
 package br.com.clube3barbas.domain.rateio;
 
+import br.com.clube3barbas.domain.assinante.Assinante;
 import br.com.clube3barbas.domain.assinante.AssinanteRepository;
 import br.com.clube3barbas.domain.atendimento.Atendimento;
 import br.com.clube3barbas.domain.atendimento.AtendimentoRepository;
@@ -7,16 +8,22 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 /**
  * Liga o RateioService (a matematica pura do 60/40) aos assinantes e atendimentos
  * persistidos. A regra continua a mesma, calculada por assinante: o fundo dos
  * barbeiros daquele cliente e dividido proporcionalmente aos atendimentos que cada
- * barbeiro fez para ELE. O fechamento geral apenas soma esse resultado entre todos
- * os assinantes ja atendidos.
+ * barbeiro fez para ELE. Os fechamentos agregados apenas somam esse resultado entre
+ * varios assinantes, usando janelas de tempo diferentes conforme o caso de uso:
+ * o ciclo vigente de cada um (calcularGeral, usado na operacao do dia a dia) ou um
+ * periodo livre escolhido pelo Gerente (calcularPorPeriodo, para fechamento/relatorio).
  */
 @Service
 public class RateioClubeService {
@@ -55,30 +62,64 @@ public class RateioClubeService {
         );
     }
 
+    /** Soma o ciclo vigente de cada assinante -- "quanto devo agora", por assinante. */
     public ResultadoGeralRateio calcularGeral() {
-        var porAssinante = atendimentoRepository.listarTodos().stream()
-                .collect(Collectors.groupingBy(Atendimento::assinanteId, LinkedHashMap::new, Collectors.toList()));
+        return agregar(agruparTodosPorAssinante(), (assinante, atendimentos) -> atendimentos.stream()
+                .filter(atendimento -> assinante.dentroDoCicloVigente(atendimento.dataHora()))
+                .toList());
+    }
 
+    /**
+     * Soma um periodo livre, igual para todos os assinantes -- "quanto vou pagar no
+     * fechamento de tal mes", independente do ciclo individual de cada um. Os
+     * assinantes considerados sao os que tiveram ao menos um atendimento dentro do
+     * periodo; os demais nao entram (nao pagaram/nao foram atendidos nessa janela).
+     */
+    public ResultadoGeralRateio calcularPorPeriodo(Instant inicio, Instant fimExclusivo) {
+        if (inicio == null || fimExclusivo == null) {
+            throw new IllegalArgumentException("O inicio e o fim do periodo sao obrigatorios.");
+        }
+        if (!inicio.isBefore(fimExclusivo)) {
+            throw new IllegalArgumentException("O inicio do periodo deve ser anterior ao fim.");
+        }
+        return agregar(agruparTodosPorAssinante(), (assinante, atendimentos) -> atendimentos.stream()
+                .filter(atendimento -> !atendimento.dataHora().isBefore(inicio)
+                        && atendimento.dataHora().isBefore(fimExclusivo))
+                .toList());
+    }
+
+    private Map<String, List<Atendimento>> agruparTodosPorAssinante() {
+        return atendimentoRepository.listarTodos().stream()
+                .collect(Collectors.groupingBy(Atendimento::assinanteId, LinkedHashMap::new, Collectors.toList()));
+    }
+
+    /**
+     * Agrega o rateio de varios assinantes. O "filtro" decide, para cada assinante,
+     * quais dos atendimentos brutos dele entram no calculo -- e' o unico ponto que
+     * muda entre calcularGeral (ciclo individual) e calcularPorPeriodo (janela unica).
+     */
+    private ResultadoGeralRateio agregar(
+            Map<String, List<Atendimento>> atendimentosPorAssinante,
+            BiFunction<Assinante, List<Atendimento>, List<Atendimento>> filtro
+    ) {
         var valorTotalPlanos = BigDecimal.ZERO.setScale(2);
         var valorTotalGerencia = BigDecimal.ZERO.setScale(2);
         var valorTotalBarbeiros = BigDecimal.ZERO.setScale(2);
         var acumuladoPorBarbeiro = new LinkedHashMap<String, ParcelaAcumulada>();
         var assinantesConsiderados = 0;
 
-        for (var entry : porAssinante.entrySet()) {
+        for (var entry : atendimentosPorAssinante.entrySet()) {
             var assinante = assinanteRepository.buscarPorId(entry.getKey()).orElse(null);
             if (assinante == null) {
                 // Assinante removido apos os atendimentos terem sido registrados: os
                 // atendimentos ficam preservados no historico, mas saem do fechamento.
                 continue;
             }
-            var atendimentosRateio = entry.getValue().stream()
-                    .filter(atendimento -> assinante.dentroDoCicloVigente(atendimento.dataHora()))
+
+            var atendimentosRateio = filtro.apply(assinante, entry.getValue()).stream()
                     .map(atendimento -> new AtendimentoRateio(atendimento.barbeiroId(), atendimento.barbeiroNome()))
                     .toList();
             if (atendimentosRateio.isEmpty()) {
-                // O assinante existe e tem atendimentos no historico, mas nenhum deles
-                // cai no ciclo vigente -- nao entra no fechamento geral de agora.
                 continue;
             }
             assinantesConsiderados++;

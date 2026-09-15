@@ -114,6 +114,43 @@ class RateioClubeServiceTest {
         assertThat(resultado.parcelas()).isEmpty();
     }
 
+    @Test
+    void calculaPorPeriodoIgnorandoOCicloIndividualDeCadaAssinante() {
+        // Assinantes com ciclos individuais bem diferentes -- o fechamento por
+        // periodo nao liga para isso, so olha se o atendimento caiu na janela.
+        var clienteA = assinantes.salvar(assinante("cliente-a", "Cliente A"));
+        var clienteB = assinantes.salvar(new Assinante(
+                "cliente-b", "Cliente B",
+                new BigDecimal("200.00"), new BigDecimal("60"), new BigDecimal("40"),
+                Instant.now().minus(200, ChronoUnit.DAYS), Instant.now()
+        ));
+        var inicioPeriodo = Instant.now().minus(10, ChronoUnit.DAYS);
+        var fimPeriodo = Instant.now().plus(1, ChronoUnit.DAYS);
+        atendimentos.salvar(atendimento(clienteA.id(), "b1", "Barbeiro 1"));
+        atendimentos.salvar(atendimento(clienteB.id(), "b1", "Barbeiro 1"));
+        // Fora do periodo pedido -- nao deve entrar na soma.
+        atendimentos.salvar(new Atendimento(
+                "at-fora", clienteA.id(), "b1", "Barbeiro 1", Instant.now().minus(40, ChronoUnit.DAYS)
+        ));
+
+        var resultado = service.calcularPorPeriodo(inicioPeriodo, fimPeriodo);
+
+        assertThat(resultado.totalAssinantesAtendidos()).isEqualTo(2);
+        assertThat(resultado.valorTotalBarbeiros()).isEqualByComparingTo("160.00");
+        assertThat(resultado.parcelas()).singleElement().satisfies(parcela -> {
+            assertThat(parcela.quantidadeAtendimentos()).isEqualTo(2);
+            assertThat(parcela.valor()).isEqualByComparingTo("160.00");
+        });
+    }
+
+    @Test
+    void rejeitaPeriodoComFimAntesDoInicio() {
+        var agora = Instant.now();
+        assertThatThrownBy(() -> service.calcularPorPeriodo(agora, agora.minus(1, ChronoUnit.DAYS)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("anterior ao fim");
+    }
+
     private Assinante assinante(String id, String nome) {
         var agora = Instant.now();
         return new Assinante(

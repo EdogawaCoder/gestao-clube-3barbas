@@ -3,12 +3,16 @@ package br.com.clube3barbas.api.rateio;
 import br.com.clube3barbas.domain.rateio.RateioClubeService;
 import br.com.clube3barbas.domain.rateio.ResultadoGeralRateio;
 import br.com.clube3barbas.domain.rateio.ResultadoRateio;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Instant;
 
 /**
  * Fechamento real do rateio, calculado a partir de assinantes e atendimentos
@@ -35,5 +39,19 @@ public class RateioClubeController {
     @PreAuthorize("hasAnyRole('GERENTE', 'ADMINISTRATIVO', 'BARBEIRO')")
     public ResultadoGeralRateio calcularGeral() {
         return rateioClubeService.calcularGeral();
+    }
+
+    /**
+     * Fechamento por periodo livre (ex.: um mes fechado), igual para todos os
+     * assinantes -- usado para o Gerente saber quanto vai pagar aos barbeiros ao
+     * final de uma janela escolhida, independente do ciclo individual de cada um.
+     */
+    @GetMapping("/periodo")
+    @PreAuthorize("hasAnyRole('GERENTE', 'ADMINISTRATIVO', 'BARBEIRO')")
+    public ResultadoGeralRateio calcularPorPeriodo(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant inicio,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant fim
+    ) {
+        return rateioClubeService.calcularPorPeriodo(inicio, fim);
     }
 }

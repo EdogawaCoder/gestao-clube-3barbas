@@ -33,7 +33,16 @@ const state = {
     calculando: false,
     mostrarNovoAssinante: false,
     mostrarNovoBarbeiro: false,
+    // Fechamento por período (opção "Todos"): por padrão, o mês corrente —
+    // mas livre para qualquer janela, para fechar um mês passado, por exemplo.
+    periodoInicio: primeiroDiaDoMes(0),
+    periodoFim: primeiroDiaDoMes(1),
   },
+}
+
+function primeiroDiaDoMes(deslocamentoMeses) {
+  const hoje = new Date()
+  return new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth() + deslocamentoMeses, 1)).toISOString().slice(0, 10)
 }
 
 const menu = [
@@ -104,8 +113,11 @@ function deInputDate(yyyyMmDd) {
   return `${yyyyMmDd}T00:00:00.000Z`
 }
 
+// Usada só para marcos de dia (início/fim de ciclo e de período), sempre à
+// meia-noite UTC por convenção — formata em UTC para não "voltar" um dia em
+// fusos atrás de UTC (o caso do Brasil).
 function formatarDataCurta(isoInstant) {
-  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(isoInstant))
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(new Date(isoInstant))
 }
 
 function setToast(message, type = 'success') {
@@ -345,10 +357,23 @@ function clubView() {
             }).join('') || '<p class="empty-state">Nenhuma visita registrada ainda para este assinante.</p>'}
           </div>
         ` : ''}
+
+        ${assinanteId === 'todos' ? `
+          <div class="divider"></div>
+          <div class="section-title">
+            <div><h3>Período do fechamento</h3><p>Soma todos os assinantes atendidos dentro dessa janela — útil para fechar um mês.</p></div>
+          </div>
+          <form id="periodo-form" class="attendance-row" style="grid-template-columns: 1fr 1fr auto;">
+            <label>Início<input type="date" name="inicio" value="${clube.periodoInicio}" required /></label>
+            <label>Fim<input type="date" name="fim" value="${clube.periodoFim}" required /></label>
+            <button class="button button--primary button--small" type="submit" style="align-self: end;">Calcular período</button>
+          </form>
+        ` : ''}
         ${!assinanteId ? '<p class="empty-state" style="margin-top: 16px;">Selecione um assinante (ou "Todos") para ver e registrar atendimentos.</p>' : ''}
       </div>
       <aside class="panel result-panel">
         <div class="panel__heading"><div><p class="eyebrow">Resultado</p><h2>Quanto pagar aos barbeiros</h2></div></div>
+        ${assinanteId === 'todos' ? `<p class="tag" style="margin-bottom: 14px;">${formatarDataCurta(deInputDate(clube.periodoInicio))} – ${formatarDataCurta(deInputDate(clube.periodoFim))}</p>` : ''}
         ${clube.calculando
           ? '<div class="result-placeholder"><span class="spinner"></span><p>Calculando…</p></div>'
           : clube.resultado
@@ -469,6 +494,7 @@ function bindEvents() {
   document.querySelector('#novo-barbeiro-form')?.addEventListener('submit', handleNovoBarbeiro)
   document.querySelector('#novo-atendimento-form')?.addEventListener('submit', handleNovoAtendimento)
   document.querySelector('#editar-assinante-form')?.addEventListener('submit', handleEditarAssinante)
+  document.querySelector('#periodo-form')?.addEventListener('submit', handlePeriodo)
 
   document.getElementById('editar-pct-gerencia')?.addEventListener('input', (event) => {
     const gerencia = Math.max(0, Math.min(100, Number(event.target.value) || 0))
@@ -648,7 +674,9 @@ async function carregarAtendimentosEDivisao() {
   try {
     if (assinanteId === 'todos') {
       clube.atendimentos = []
-      clube.resultado = await apiFetch('/api/v1/rateios/geral', {}, state.devSession)
+      const inicio = encodeURIComponent(deInputDate(clube.periodoInicio))
+      const fim = encodeURIComponent(deInputDate(clube.periodoFim))
+      clube.resultado = await apiFetch(`/api/v1/rateios/periodo?inicio=${inicio}&fim=${fim}`, {}, state.devSession)
     } else {
       const [atendimentos, resultado] = await Promise.all([
         apiFetch(`/api/v1/assinantes/${assinanteId}/atendimentos`, {}, state.devSession),
@@ -713,6 +741,20 @@ async function handleEditarAssinante(event) {
   } catch (error) {
     setToast(error.message, 'error')
   }
+}
+
+async function handlePeriodo(event) {
+  event.preventDefault()
+  const form = new FormData(event.currentTarget)
+  const inicio = form.get('inicio')
+  const fim = form.get('fim')
+  if (inicio >= fim) {
+    setToast('O início do período deve ser antes do fim.', 'error')
+    return
+  }
+  state.clube.periodoInicio = inicio
+  state.clube.periodoFim = fim
+  carregarAtendimentosEDivisao()
 }
 
 async function handleNovoBarbeiro(event) {
