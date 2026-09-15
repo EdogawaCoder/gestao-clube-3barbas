@@ -40,7 +40,10 @@ public class RateioClubeService {
     public ResultadoRateio calcularParaAssinante(String assinanteId) {
         var assinante = assinanteRepository.buscarPorId(assinanteId)
                 .orElseThrow(() -> new IllegalArgumentException("Assinante nao encontrado."));
+        // So conta o que aconteceu dentro do ciclo vigente (os 30 dias atuais da
+        // assinatura) -- visitas de ciclos anteriores nao entram no fechamento deste.
         var atendimentos = atendimentoRepository.listarPorAssinante(assinanteId).stream()
+                .filter(atendimento -> assinante.dentroDoCicloVigente(atendimento.dataHora()))
                 .map(atendimento -> new AtendimentoRateio(atendimento.barbeiroId(), atendimento.barbeiroNome()))
                 .toList();
 
@@ -69,11 +72,17 @@ public class RateioClubeService {
                 // atendimentos ficam preservados no historico, mas saem do fechamento.
                 continue;
             }
-            assinantesConsiderados++;
-
             var atendimentosRateio = entry.getValue().stream()
+                    .filter(atendimento -> assinante.dentroDoCicloVigente(atendimento.dataHora()))
                     .map(atendimento -> new AtendimentoRateio(atendimento.barbeiroId(), atendimento.barbeiroNome()))
                     .toList();
+            if (atendimentosRateio.isEmpty()) {
+                // O assinante existe e tem atendimentos no historico, mas nenhum deles
+                // cai no ciclo vigente -- nao entra no fechamento geral de agora.
+                continue;
+            }
+            assinantesConsiderados++;
+
             var resultado = rateioService.calcular(
                     assinante.valorPlano(),
                     assinante.percentualGerencia(),

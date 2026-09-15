@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -81,11 +82,44 @@ class RateioClubeServiceTest {
         assertThat(resultado.parcelas()).isEmpty();
     }
 
+    @Test
+    void ignoraAtendimentoDeUmCicloAnteriorAoCalcularParaOAssinante() {
+        var cliente = assinantes.salvar(assinante("cliente-1", "Cliente Um"));
+        var forDoCiclo = new Atendimento(
+                "at-antigo", cliente.id(), "b1", "Barbeiro 1",
+                Instant.now().minus(Assinante.DURACAO_CICLO_DIAS + 5, ChronoUnit.DAYS)
+        );
+        atendimentos.salvar(forDoCiclo);
+        atendimentos.salvar(atendimento(cliente.id(), "b2", "Barbeiro 2"));
+
+        var resultado = service.calcularParaAssinante(cliente.id());
+
+        assertThat(resultado.parcelas()).singleElement().satisfies(parcela -> {
+            assertThat(parcela.barbeiroId()).isEqualTo("b2");
+            assertThat(parcela.valor()).isEqualByComparingTo("80.00");
+        });
+    }
+
+    @Test
+    void naoContaAssinanteCujosAtendimentosSaoTodosDeCicloAnteriorNoFechamentoGeral() {
+        var cliente = assinantes.salvar(assinante("cliente-1", "Cliente Um"));
+        atendimentos.salvar(new Atendimento(
+                "at-antigo", cliente.id(), "b1", "Barbeiro 1",
+                Instant.now().minus(Assinante.DURACAO_CICLO_DIAS + 1, ChronoUnit.DAYS)
+        ));
+
+        var resultado = service.calcularGeral();
+
+        assertThat(resultado.totalAssinantesAtendidos()).isZero();
+        assertThat(resultado.parcelas()).isEmpty();
+    }
+
     private Assinante assinante(String id, String nome) {
+        var agora = Instant.now();
         return new Assinante(
                 id, nome,
                 new BigDecimal("200.00"), new BigDecimal("60"), new BigDecimal("40"),
-                Instant.now()
+                agora.minus(1, ChronoUnit.DAYS), agora
         );
     }
 

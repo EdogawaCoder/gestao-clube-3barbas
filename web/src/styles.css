@@ -120,6 +120,24 @@ input:focus { border-color: var(--green-soft); box-shadow: 0 0 0 3px rgba(87,33,
 .roadmap-list small { color: var(--muted); font-size: 10px; }
 .roadmap-list .is-done > span { background: var(--green); color: #fff; border-color: var(--green); }
 
+.cycle-pill { background: var(--green); color: #fff; border-radius: 11px; padding: 12px 18px; white-space: nowrap; }
+.cycle-pill span { display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; opacity: .65; margin-bottom: 3px; }
+.cycle-pill strong { font-family: Georgia, serif; font-size: 15px; font-weight: 500; color: var(--gold); }
+.divider { height: 1px; background: var(--line); margin: 22px 0; }
+.edit-plan-form { display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 12px; align-items: end; }
+.edit-plan-form label { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.edit-plan-form input { padding: 9px 10px; font-size: 12px; background: #fff; }
+.visit-item { display: grid; grid-template-columns: 34px 1fr auto 30px; align-items: center; gap: 10px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+.visit-item:last-child { border-bottom: 0; }
+.visit-item > div:nth-child(2) { display: grid; gap: 2px; }
+.visit-item strong { font-size: 12.5px; }
+.visit-item small { color: var(--muted); font-size: 9px; }
+.visit-item.is-fora-do-ciclo .avatar { background: #efe9dd; color: var(--muted); }
+.visit-item.is-fora-do-ciclo strong, .visit-item.is-fora-do-ciclo small { color: var(--muted); }
+.status-chip { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+.status-chip--in { background: #e6f1ea; color: #3f7a5c; }
+.status-chip--out { background: #f7e6e4; color: var(--danger); }
+
 .club-layout { display: grid; grid-template-columns: minmax(520px, 1.25fr) minmax(340px, .75fr); gap: 18px; align-items: start; }
 .form-grid { display: grid; gap: 13px; }
 .form-grid--three { grid-template-columns: repeat(3, 1fr); }
@@ -207,4 +225,6 @@ input:focus { border-color: var(--green-soft); box-shadow: 0 0 0 3px rgba(87,33,
   .attendance-row label:nth-of-type(2) { grid-column: 2; }
   .attendance-row .icon-button { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
   .auth-card__heading h2 { font-size: 37px; }
+  .edit-plan-form { grid-template-columns: 1fr 1fr; }
+  .page-heading .cycle-pill { order: -1; }
 }

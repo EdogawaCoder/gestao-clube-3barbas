@@ -80,6 +80,34 @@ function money(value) {
   }).format(Number(value || 0))
 }
 
+// O ciclo de vigência da assinatura dura 30 dias (mesma regra do backend, ver
+// Assinante.DURACAO_CICLO_DIAS). Aqui só formatamos/comparamos datas em cima do
+// que a API já calcula e devolve (cicloInicio); o "fim" é sempre derivado dele.
+const DURACAO_CICLO_DIAS = 30
+
+function cicloFimIso(cicloInicioIso) {
+  const fim = new Date(cicloInicioIso)
+  fim.setUTCDate(fim.getUTCDate() + DURACAO_CICLO_DIAS)
+  return fim.toISOString()
+}
+
+function estaNoCicloVigente(dataHoraIso, cicloInicioIso) {
+  const t = new Date(dataHoraIso).getTime()
+  return t >= new Date(cicloInicioIso).getTime() && t < new Date(cicloFimIso(cicloInicioIso)).getTime()
+}
+
+function paraInputDate(isoInstant) {
+  return isoInstant ? isoInstant.slice(0, 10) : ''
+}
+
+function deInputDate(yyyyMmDd) {
+  return `${yyyyMmDd}T00:00:00.000Z`
+}
+
+function formatarDataCurta(isoInstant) {
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(isoInstant))
+}
+
 function setToast(message, type = 'success') {
   state.toast = { message, type }
   render()
@@ -228,6 +256,14 @@ function clubView() {
   return `
     <header class="page-heading">
       <div><p class="eyebrow">Rateio real</p><h1>Gestão do Clube</h1><p>Escolha o assinante, registre quem atendeu, e veja quanto cada barbeiro deve receber.</p></div>
+      ${assinanteSelecionado ? `
+        <div class="cycle-pill">
+          <div>
+            <span>Ciclo vigente</span>
+            <strong>${formatarDataCurta(assinanteSelecionado.cicloInicio)} – ${formatarDataCurta(cicloFimIso(assinanteSelecionado.cicloInicio))}</strong>
+          </div>
+        </div>
+      ` : ''}
     </header>
     <section class="club-layout">
       <div class="panel share-form">
@@ -258,9 +294,24 @@ function clubView() {
           </form>
         ` : ''}
 
-        ${assinanteId && assinanteId !== 'todos' ? `
+        ${assinanteSelecionado ? `
+          <div class="divider"></div>
           <div class="section-title">
-            <div><h3>Atendimentos${assinanteSelecionado ? ` de ${escapeHtml(assinanteSelecionado.nome)}` : ''}</h3><p>Cada linha é uma visita já registrada.</p></div>
+            <div><h3>Plano de ${escapeHtml(assinanteSelecionado.nome)}</h3><p>Editável — mudanças valem a partir do próximo cálculo.</p></div>
+          </div>
+          <form id="editar-assinante-form" class="edit-plan-form" data-assinante-id="${assinanteSelecionado.id}">
+            <label>Mensalidade (R$)<input name="valorPlano" inputmode="decimal" value="${assinanteSelecionado.valorPlano}" required /></label>
+            <label>Gerência (%)<input name="percentualGerencia" id="editar-pct-gerencia" inputmode="decimal" value="${assinanteSelecionado.percentualGerencia}" required /></label>
+            <label>Barbeiros (%)<input id="editar-pct-barbeiros" inputmode="decimal" value="${assinanteSelecionado.percentualBarbeiros}" disabled /></label>
+            <label>Início do ciclo<input name="cicloInicio" type="date" value="${paraInputDate(assinanteSelecionado.cicloInicio)}" required /></label>
+            <button class="button button--secondary button--small" type="submit">Salvar alterações</button>
+          </form>
+        ` : ''}
+
+        ${assinanteId && assinanteId !== 'todos' ? `
+          <div class="divider"></div>
+          <div class="section-title">
+            <div><h3>Atendimentos${assinanteSelecionado ? ` de ${escapeHtml(assinanteSelecionado.nome)}` : ''}</h3><p>Só as visitas dentro do ciclo vigente entram no cálculo.</p></div>
           </div>
           <form id="novo-atendimento-form" class="attendance-row" style="grid-template-columns: 1fr auto;">
             <label>Barbeiro que atendeu
@@ -271,7 +322,10 @@ function clubView() {
             </label>
             <button class="button button--primary button--small" type="submit" style="align-self: end;">Registrar visita</button>
           </form>
-         
+
+          <button type="button" class="link-button" data-action="toggle-novo-barbeiro">
+            ${clube.mostrarNovoBarbeiro ? '– Cancelar novo barbeiro' : '+ Barbeiro não está na lista? Cadastrar'}
+          </button>
           ${clube.mostrarNovoBarbeiro ? `
             <form id="novo-barbeiro-form" class="attendance-row" style="grid-template-columns: 1fr auto;">
               <label>Nome do barbeiro<input name="nome" required /></label>
@@ -279,13 +333,16 @@ function clubView() {
             </form>
           ` : ''}
           <div class="attendance-list" style="margin-top: 16px;">
-            ${clube.atendimentos.map((item) => `
-              <div class="allocation-item">
+            ${clube.atendimentos.map((item) => {
+              const noCiclo = assinanteSelecionado ? estaNoCicloVigente(item.dataHora, assinanteSelecionado.cicloInicio) : true
+              return `
+              <div class="visit-item ${noCiclo ? '' : 'is-fora-do-ciclo'}">
                 <div class="avatar">${escapeHtml(item.barbeiroNome).slice(0, 1)}</div>
                 <div><strong>${escapeHtml(item.barbeiroNome)}</strong><small>${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(item.dataHora))}</small></div>
+                <span class="status-chip ${noCiclo ? 'status-chip--in' : 'status-chip--out'}">${noCiclo ? 'no ciclo' : 'fora do ciclo'}</span>
                 <button type="button" class="icon-button" data-action="remover-atendimento" data-atendimento-id="${item.id}" aria-label="Remover atendimento" title="Remover atendimento lançado errado">×</button>
-              </div>
-            `).join('') || '<p class="empty-state">Nenhuma visita registrada ainda para este assinante.</p>'}
+              </div>`
+            }).join('') || '<p class="empty-state">Nenhuma visita registrada ainda para este assinante.</p>'}
           </div>
         ` : ''}
         ${!assinanteId ? '<p class="empty-state" style="margin-top: 16px;">Selecione um assinante (ou "Todos") para ver e registrar atendimentos.</p>' : ''}
@@ -411,6 +468,12 @@ function bindEvents() {
   document.querySelector('#novo-assinante-form')?.addEventListener('submit', handleNovoAssinante)
   document.querySelector('#novo-barbeiro-form')?.addEventListener('submit', handleNovoBarbeiro)
   document.querySelector('#novo-atendimento-form')?.addEventListener('submit', handleNovoAtendimento)
+  document.querySelector('#editar-assinante-form')?.addEventListener('submit', handleEditarAssinante)
+
+  document.getElementById('editar-pct-gerencia')?.addEventListener('input', (event) => {
+    const gerencia = Math.max(0, Math.min(100, Number(event.target.value) || 0))
+    document.getElementById('editar-pct-barbeiros').value = (100 - gerencia).toFixed(0)
+  })
 
   document.querySelector('#assinante-select')?.addEventListener('change', (event) => {
     state.clube.assinanteSelecionadoId = event.target.value
@@ -620,6 +683,32 @@ async function handleNovoAssinante(event) {
     state.clube.assinanteSelecionadoId = assinante.id
     render()
     setToast(`${assinante.nome} cadastrado.`)
+    carregarAtendimentosEDivisao()
+  } catch (error) {
+    setToast(error.message, 'error')
+  }
+}
+
+async function handleEditarAssinante(event) {
+  event.preventDefault()
+  const form = new FormData(event.currentTarget)
+  const assinanteId = event.currentTarget.dataset.assinanteId
+  const atual = state.clube.assinantes.find((item) => item.id === assinanteId)
+  const percentualGerencia = form.get('percentualGerencia')
+  try {
+    const atualizado = await apiFetch(`/api/v1/assinantes/${assinanteId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        nome: atual.nome,
+        valorPlano: form.get('valorPlano'),
+        percentualGerencia,
+        percentualBarbeiros: 100 - Number(percentualGerencia),
+        cicloInicio: deInputDate(form.get('cicloInicio')),
+      }),
+    }, state.devSession)
+    const indice = state.clube.assinantes.findIndex((item) => item.id === assinanteId)
+    state.clube.assinantes[indice] = atualizado
+    setToast('Assinatura atualizada.')
     carregarAtendimentosEDivisao()
   } catch (error) {
     setToast(error.message, 'error')

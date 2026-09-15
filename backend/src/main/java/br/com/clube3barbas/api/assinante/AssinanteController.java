@@ -9,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -47,6 +48,19 @@ public class AssinanteController {
                 request.valorPlano(),
                 request.percentualGerencia(),
                 request.percentualBarbeiros()
+        );
+    }
+
+    @PutMapping(path = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PreAuthorize("hasAnyRole('GERENTE', 'ADMINISTRATIVO', 'BARBEIRO')")
+    public Assinante atualizar(@PathVariable String id, @Valid @RequestBody AtualizarAssinanteRequest request) {
+        return service.atualizar(
+                id,
+                request.nome(),
+                request.valorPlano(),
+                request.percentualGerencia(),
+                request.percentualBarbeiros(),
+                request.cicloInicio()
         );
     }
 }

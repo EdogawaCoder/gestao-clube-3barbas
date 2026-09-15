@@ -31,14 +31,41 @@ public class AssinanteService {
             BigDecimal percentualGerencia,
             BigDecimal percentualBarbeiros
     ) {
+        var agora = Instant.now();
         var assinante = new Assinante(
                 UUID.randomUUID().toString(),
                 nome,
                 valorPlano,
                 percentualGerencia,
                 percentualBarbeiros,
-                Instant.now()
+                agora,
+                agora
         );
         return repository.salvar(assinante);
+    }
+
+    /**
+     * Atualiza os dados editaveis do assinante (nome, plano, percentuais e o inicio
+     * do ciclo vigente). O ID e a data de cadastro original nunca mudam.
+     */
+    public Assinante atualizar(
+            String id,
+            String nome,
+            BigDecimal valorPlano,
+            BigDecimal percentualGerencia,
+            BigDecimal percentualBarbeiros,
+            Instant cicloInicio
+    ) {
+        var existente = buscarPorId(id);
+        var atualizado = new Assinante(
+                existente.id(),
+                nome,
+                valorPlano,
+                percentualGerencia,
+                percentualBarbeiros,
+                cicloInicio,
+                existente.criadoEm()
+        );
+        return repository.salvar(atualizado);
     }
 }

@@ -47,6 +47,7 @@ public class FirestoreAssinanteRepository implements AssinanteRepository {
                 "planAmountCents", ConversaoMonetaria.paraInteiro(assinante.valorPlano()),
                 "managementSharePoints", ConversaoMonetaria.paraInteiro(assinante.percentualGerencia()),
                 "barbersSharePoints", ConversaoMonetaria.paraInteiro(assinante.percentualBarbeiros()),
+                "cycleStartsAt", assinante.cicloInicio().toEpochMilli(),
                 "createdAt", assinante.criadoEm().toEpochMilli()
         );
         FirestoreSuporte.aguardar(firestore.collection(COLECAO).document(assinante.id()).set(dados));
@@ -60,6 +61,7 @@ public class FirestoreAssinanteRepository implements AssinanteRepository {
                 ConversaoMonetaria.deInteiro(documento.getLong("planAmountCents")),
                 ConversaoMonetaria.deInteiro(documento.getLong("managementSharePoints")),
                 ConversaoMonetaria.deInteiro(documento.getLong("barbersSharePoints")),
+                Instant.ofEpochMilli(documento.getLong("cycleStartsAt")),
                 Instant.ofEpochMilli(documento.getLong("createdAt"))
         );
     }
