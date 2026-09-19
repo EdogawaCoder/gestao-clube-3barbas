@@ -12,14 +12,6 @@
     ],
     "rewrites": [
       {
-        "source": "/api/**",
-        "run": {
-          "serviceId": "clube-3-barbas-api",
-          "region": "southamerica-east1",
-          "pinTag": true
-        }
-      },
-      {
         "source": "**",
         "destination": "/index.html"
       }
