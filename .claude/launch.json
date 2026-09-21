@@ -11,9 +11,13 @@
     {
       "name": "backend-api",
       "runtimeExecutable": "mvn",
-      "runtimeArgs": ["spring-boot:run", "-Dspring-boot.run.profiles=local"],
+      "runtimeArgs": ["-Denforcer.skip=true", "spring-boot:run", "-Dspring-boot.run.profiles=local"],
       "cwd": "backend",
-      "port": 8080
+      "port": 8080,
+      "env": {
+        "FIREBASE_ENABLED": "false",
+        "DEVELOPMENT_AUTH_ENABLED": "true"
+      }
     }
   ]
 }

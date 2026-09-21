@@ -54,6 +54,11 @@ public class FirestoreAssinanteRepository implements AssinanteRepository {
         return assinante;
     }
 
+    @Override
+    public void remover(String id) {
+        FirestoreSuporte.aguardar(firestore.collection(COLECAO).document(id).delete());
+    }
+
     private Assinante converter(DocumentSnapshot documento) {
         return new Assinante(
                 documento.getId(),

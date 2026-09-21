@@ -10,4 +10,6 @@ public interface AssinanteRepository {
     Optional<Assinante> buscarPorId(String id);
 
     Assinante salvar(Assinante assinante);
+
+    void remover(String id);
 }

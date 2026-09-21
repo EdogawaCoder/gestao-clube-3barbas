@@ -34,4 +34,9 @@ public class MemoriaAssinanteRepository implements AssinanteRepository {
         assinantes.put(assinante.id(), assinante);
         return assinante;
     }
+
+    @Override
+    public void remover(String id) {
+        assinantes.remove(id);
+    }
 }

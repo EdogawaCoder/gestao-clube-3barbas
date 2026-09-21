@@ -33,6 +33,7 @@ const state = {
     calculando: false,
     mostrarNovoAssinante: false,
     mostrarNovoBarbeiro: false,
+    ciclosAnteriores: [],
     // Fechamento por período (opção "Todos"): por padrão, o mês corrente —
     // mas livre para qualquer janela, para fechar um mês passado, por exemplo.
     periodoInicio: primeiroDiaDoMes(0),
@@ -318,6 +319,26 @@ function clubView() {
             <label>Início do ciclo<input name="cicloInicio" type="date" value="${paraInputDate(assinanteSelecionado.cicloInicio)}" required /></label>
             <button class="button button--secondary button--small" type="submit">Salvar alterações</button>
           </form>
+          <button type="button" class="link-button" data-action="excluir-assinante" data-assinante-id="${assinanteSelecionado.id}" style="color: var(--danger); margin-top: 4px;">
+            Excluir este assinante
+          </button>
+
+          <div class="divider"></div>
+          <div class="section-title">
+            <div><h3>Linha do tempo de ciclos</h3><p>Toda vez que o início do ciclo muda, o período anterior fica guardado aqui.</p></div>
+          </div>
+          <div class="cycle-timeline">
+            ${clube.ciclosAnteriores.map((ciclo) => `
+              <div class="cycle-timeline__item">
+                <span class="status-chip status-chip--out">encerrado</span>
+                <strong>${formatarDataCurta(ciclo.inicio)} – ${formatarDataCurta(cicloFimIso(ciclo.inicio))}</strong>
+              </div>
+            `).join('')}
+            <div class="cycle-timeline__item">
+              <span class="status-chip status-chip--in">vigente</span>
+              <strong>${formatarDataCurta(assinanteSelecionado.cicloInicio)} – ${formatarDataCurta(cicloFimIso(assinanteSelecionado.cicloInicio))}</strong>
+            </div>
+          </div>
         ` : ''}
 
         ${assinanteId && assinanteId !== 'todos' ? `
@@ -543,6 +564,9 @@ function bindEvents() {
     if (action === 'remover-atendimento') button.addEventListener('click', () => {
       handleRemoverAtendimento(button.dataset.atendimentoId)
     })
+    if (action === 'excluir-assinante') button.addEventListener('click', () => {
+      handleExcluirAssinante(button.dataset.assinanteId)
+    })
     if (action === 'toggle-menu') button.addEventListener('click', () => {
       document.querySelector('.sidebar')?.classList.toggle('is-open')
     })
@@ -665,6 +689,7 @@ async function carregarAtendimentosEDivisao() {
   if (!assinanteId) {
     clube.atendimentos = []
     clube.resultado = null
+    clube.ciclosAnteriores = []
     render()
     return
   }
@@ -674,16 +699,19 @@ async function carregarAtendimentosEDivisao() {
   try {
     if (assinanteId === 'todos') {
       clube.atendimentos = []
+      clube.ciclosAnteriores = []
       const inicio = encodeURIComponent(deInputDate(clube.periodoInicio))
       const fim = encodeURIComponent(deInputDate(clube.periodoFim))
       clube.resultado = await apiFetch(`/api/v1/rateios/periodo?inicio=${inicio}&fim=${fim}`, {}, state.devSession)
     } else {
-      const [atendimentos, resultado] = await Promise.all([
+      const [atendimentos, resultado, ciclosAnteriores] = await Promise.all([
         apiFetch(`/api/v1/assinantes/${assinanteId}/atendimentos`, {}, state.devSession),
         apiFetch(`/api/v1/rateios/assinantes/${assinanteId}`, {}, state.devSession),
+        apiFetch(`/api/v1/assinantes/${assinanteId}/ciclos`, {}, state.devSession),
       ])
       clube.atendimentos = atendimentos
       clube.resultado = resultado
+      clube.ciclosAnteriores = ciclosAnteriores
     }
   } catch (error) {
     setToast(error.message, 'error')
@@ -785,6 +813,27 @@ async function handleNovoAtendimento(event) {
     }, state.devSession)
     setToast('Atendimento registrado.')
     carregarAtendimentosEDivisao()
+  } catch (error) {
+    setToast(error.message, 'error')
+  }
+}
+
+async function handleExcluirAssinante(assinanteId) {
+  const assinante = state.clube.assinantes.find((item) => item.id === assinanteId)
+  const confirmado = window.confirm(
+    `Excluir "${assinante?.nome || 'este assinante'}" definitivamente?\n\nOs atendimentos já registrados para ele continuam guardados no histórico, mas ele some da lista de assinantes. Essa ação não pode ser desfeita.`
+  )
+  if (!confirmado) return
+
+  try {
+    await apiFetch(`/api/v1/assinantes/${assinanteId}`, { method: 'DELETE' }, state.devSession)
+    state.clube.assinantes = state.clube.assinantes.filter((item) => item.id !== assinanteId)
+    state.clube.assinanteSelecionadoId = ''
+    state.clube.atendimentos = []
+    state.clube.resultado = null
+    state.clube.ciclosAnteriores = []
+    setToast(`${assinante?.nome || 'Assinante'} excluído.`)
+    render()
   } catch (error) {
     setToast(error.message, 'error')
   }

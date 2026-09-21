@@ -11,9 +11,11 @@ import java.util.UUID;
 public class AssinanteService {
 
     private final AssinanteRepository repository;
+    private final HistoricoCicloRepository historicoCicloRepository;
 
-    public AssinanteService(AssinanteRepository repository) {
+    public AssinanteService(AssinanteRepository repository, HistoricoCicloRepository historicoCicloRepository) {
         this.repository = repository;
+        this.historicoCicloRepository = historicoCicloRepository;
     }
 
     public List<Assinante> listar() {
@@ -46,7 +48,9 @@ public class AssinanteService {
 
     /**
      * Atualiza os dados editaveis do assinante (nome, plano, percentuais e o inicio
-     * do ciclo vigente). O ID e a data de cadastro original nunca mudam.
+     * do ciclo vigente). O ID e a data de cadastro original nunca mudam. Se o inicio
+     * do ciclo mudou, o ciclo anterior e' arquivado no historico antes de sobrescrever
+     * -- e' assim que a linha do tempo de ciclos do assinante e' construida.
      */
     public Assinante atualizar(
             String id,
@@ -57,6 +61,14 @@ public class AssinanteService {
             Instant cicloInicio
     ) {
         var existente = buscarPorId(id);
+        if (!existente.cicloInicio().equals(cicloInicio)) {
+            historicoCicloRepository.registrar(new HistoricoCiclo(
+                    UUID.randomUUID().toString(),
+                    id,
+                    existente.cicloInicio(),
+                    Instant.now()
+            ));
+        }
         var atualizado = new Assinante(
                 existente.id(),
                 nome,
@@ -67,5 +79,21 @@ public class AssinanteService {
                 existente.criadoEm()
         );
         return repository.salvar(atualizado);
+    }
+
+    /** Lista os ciclos anteriores do assinante (o ciclo atual fica em Assinante.cicloInicio). */
+    public List<HistoricoCiclo> listarCiclosAnteriores(String assinanteId) {
+        buscarPorId(assinanteId);
+        return historicoCicloRepository.listarPorAssinante(assinanteId);
+    }
+
+    /**
+     * Exclui o assinante definitivamente -- pensado para corrigir cadastros feitos
+     * por engano (ex.: duplicados). O historico de atendimentos e de ciclos dele
+     * nao e apagado junto, apenas deixa de ter um assinante vivo associado.
+     */
+    public void excluir(String id) {
+        buscarPorId(id);
+        repository.remover(id);
     }
 }
