@@ -29,4 +29,9 @@ public class MemoriaHistoricoCicloRepository implements HistoricoCicloRepository
         ciclos.put(historicoCiclo.id(), historicoCiclo);
         return historicoCiclo;
     }
+
+    @Override
+    public void remover(String id) {
+        ciclos.remove(id);
+    }
 }

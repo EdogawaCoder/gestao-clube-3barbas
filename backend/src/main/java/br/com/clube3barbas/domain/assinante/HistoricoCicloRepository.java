@@ -7,4 +7,6 @@ public interface HistoricoCicloRepository {
     List<HistoricoCiclo> listarPorAssinante(String assinanteId);
 
     HistoricoCiclo registrar(HistoricoCiclo historicoCiclo);
+
+    void remover(String id);
 }

@@ -141,6 +141,7 @@ input:focus { border-color: var(--green-soft); box-shadow: 0 0 0 3px rgba(87,33,
 .cycle-timeline__item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
 .cycle-timeline__item:last-child { border-bottom: 0; }
 .cycle-timeline__item strong { font-weight: 650; }
+.cycle-timeline__item .icon-button { margin-left: auto; width: 28px; height: 28px; font-size: 17px; }
 
 .club-layout { display: grid; grid-template-columns: minmax(520px, 1.25fr) minmax(340px, .75fr); gap: 18px; align-items: start; }
 .form-grid { display: grid; gap: 13px; }

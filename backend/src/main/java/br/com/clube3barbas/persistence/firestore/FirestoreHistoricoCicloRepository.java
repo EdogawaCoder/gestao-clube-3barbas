@@ -46,6 +46,11 @@ public class FirestoreHistoricoCicloRepository implements HistoricoCicloReposito
         return historicoCiclo;
     }
 
+    @Override
+    public void remover(String id) {
+        FirestoreSuporte.aguardar(firestore.collection(COLECAO).document(id).delete());
+    }
+
     private HistoricoCiclo converter(DocumentSnapshot documento) {
         return new HistoricoCiclo(
                 documento.getId(),

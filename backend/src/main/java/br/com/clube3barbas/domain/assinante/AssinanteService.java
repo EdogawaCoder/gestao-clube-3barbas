@@ -87,6 +87,20 @@ public class AssinanteService {
         return historicoCicloRepository.listarPorAssinante(assinanteId);
     }
 
+    /**
+     * Remove um ciclo encerrado da linha do tempo -- pensado para desfazer registros
+     * criados por engano (ex.: uma data de inicio digitada errada e depois corrigida).
+     * Nao mexe no ciclo vigente nem nos atendimentos.
+     */
+    public void removerCicloAnterior(String assinanteId, String cicloId) {
+        var existe = listarCiclosAnteriores(assinanteId).stream()
+                .anyMatch(ciclo -> ciclo.id().equals(cicloId));
+        if (!existe) {
+            throw new IllegalArgumentException("Ciclo nao encontrado para este assinante.");
+        }
+        historicoCicloRepository.remover(cicloId);
+    }
+
     /** Reinicia o ciclo vigente, arquivando o início atual antes de começar um novo ciclo. */
     public Assinante reiniciarCiclo(String id) {
         var existente = buscarPorId(id);

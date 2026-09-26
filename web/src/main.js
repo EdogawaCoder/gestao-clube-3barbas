@@ -333,6 +333,9 @@ function clubView() {
               <div class="cycle-timeline__item">
                 <span class="status-chip status-chip--out">encerrado</span>
                 <strong>${formatarDataCurta(ciclo.inicio)} – ${formatarDataCurta(cicloFimIso(ciclo.inicio))}</strong>
+                ${activeRole() === 'GERENTE' ? `
+                  <button type="button" class="icon-button" data-action="remover-ciclo" data-ciclo-id="${ciclo.id}" aria-label="Remover ciclo" title="Remover este ciclo da linha do tempo">×</button>
+                ` : ''}
               </div>
             `).join('')}
             <div class="cycle-timeline__item">
@@ -358,7 +361,7 @@ function clubView() {
           </form>
 
           <button type="button" class="link-button" data-action="toggle-novo-barbeiro">
-            ${clube.mostrarNovoBarbeiro ? '– Cancelar novo barbeiro' : '+ Barbeiro não está na lista? Cadastrar'}
+            ${clube.mostrarNovoBarbeiro ? '– Cancelar novo barbeiro' : '+ Barbeiro não está na lista? Clique aqui.'}
           </button>
           ${clube.mostrarNovoBarbeiro ? `
             <form id="novo-barbeiro-form" class="attendance-row" style="grid-template-columns: 1fr auto;">
@@ -570,6 +573,9 @@ function bindEvents() {
     })
     if (action === 'reiniciar-ciclo') button.addEventListener('click', () => {
       handleReiniciarCiclo(button.dataset.assinanteId)
+    })
+    if (action === 'remover-ciclo') button.addEventListener('click', () => {
+      handleRemoverCiclo(button.dataset.cicloId)
     })
     if (action === 'toggle-menu') button.addEventListener('click', () => {
       document.querySelector('.sidebar')?.classList.toggle('is-open')
@@ -874,6 +880,26 @@ async function handleReiniciarCiclo(assinanteId) {
       state.clube.assinantes[indice] = atualizado
     }
     setToast(`${assinante?.nome || 'Ciclo'} reiniciado.`)
+    carregarAtendimentosEDivisao()
+  } catch (error) {
+    setToast(error.message, 'error')
+  }
+}
+
+async function handleRemoverCiclo(cicloId) {
+  const assinanteId = state.clube.assinanteSelecionadoId
+  const ciclo = state.clube.ciclosAnteriores.find((item) => item.id === cicloId)
+  if (!assinanteId || !ciclo) return
+  const confirmado = window.confirm(
+    `Remover o ciclo ${formatarDataCurta(ciclo.inicio)} – ${formatarDataCurta(cicloFimIso(ciclo.inicio))} da linha do tempo?
+
+O ciclo vigente e os atendimentos não são afetados. Essa ação não pode ser desfeita.`
+  )
+  if (!confirmado) return
+
+  try {
+    await apiFetch(`/api/v1/assinantes/${assinanteId}/ciclos/${cicloId}`, { method: 'DELETE' }, state.devSession)
+    setToast('Ciclo removido da linha do tempo.')
     carregarAtendimentosEDivisao()
   } catch (error) {
     setToast(error.message, 'error')
