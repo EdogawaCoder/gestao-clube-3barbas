@@ -676,9 +676,18 @@ async function carregarDadosDoClube() {
   }
 }
 
+// Identifica cada chamada a carregarAtendimentosEDivisao(). Se o usuário trocar
+// de assinante (ou "Todos") antes da resposta anterior voltar, essa resposta
+// atrasada não pode mais sobrescrever o que está selecionado agora — os dois
+// formatos de resultado (por assinante x geral) são diferentes, e aplicar um no
+// lugar do outro é o que produzia "R$ 0,00" e "undefined%" na tela.
+let clubeRequisicaoAtual = 0
+
 async function carregarAtendimentosEDivisao() {
   const clube = state.clube
   const assinanteId = clube.assinanteSelecionadoId
+  const requisicao = ++clubeRequisicaoAtual
+
   if (!assinanteId) {
     clube.atendimentos = []
     clube.resultado = null
@@ -690,27 +699,35 @@ async function carregarAtendimentosEDivisao() {
   clube.calculando = true
   render()
   try {
+    let atendimentos = []
+    let ciclosAnteriores = []
+    let resultado
     if (assinanteId === 'todos') {
-      clube.atendimentos = []
-      clube.ciclosAnteriores = []
       const inicio = encodeURIComponent(deInputDate(clube.periodoInicio))
       const fim = encodeURIComponent(deInputDate(clube.periodoFim))
-      clube.resultado = await apiFetch(`/api/v1/rateios/periodo?inicio=${inicio}&fim=${fim}`, {}, state.devSession)
+      resultado = await apiFetch(`/api/v1/rateios/periodo?inicio=${inicio}&fim=${fim}`, {}, state.devSession)
     } else {
-      const [atendimentos, resultado, ciclosAnteriores] = await Promise.all([
+      ;[atendimentos, resultado, ciclosAnteriores] = await Promise.all([
         apiFetch(`/api/v1/assinantes/${assinanteId}/atendimentos`, {}, state.devSession),
         apiFetch(`/api/v1/rateios/assinantes/${assinanteId}`, {}, state.devSession),
         apiFetch(`/api/v1/assinantes/${assinanteId}/ciclos`, {}, state.devSession),
       ])
-      clube.atendimentos = atendimentos
-      clube.resultado = resultado
-      clube.ciclosAnteriores = ciclosAnteriores
     }
+    if (requisicao !== clubeRequisicaoAtual) return // uma seleção mais nova já está em andamento
+    clube.atendimentos = atendimentos
+    clube.resultado = resultado
+    clube.ciclosAnteriores = ciclosAnteriores
   } catch (error) {
+    if (requisicao !== clubeRequisicaoAtual) return
+    clube.atendimentos = []
+    clube.resultado = null
+    clube.ciclosAnteriores = []
     setToast(error.message, 'error')
   } finally {
-    clube.calculando = false
-    render()
+    if (requisicao === clubeRequisicaoAtual) {
+      clube.calculando = false
+      render()
+    }
   }
 }
 
