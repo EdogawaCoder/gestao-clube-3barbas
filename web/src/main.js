@@ -136,14 +136,15 @@ function hojeLocalIso() {
   return new Date(agora.getTime() - agora.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 }
 
-// Dias que o campo de data da visita aceita: de início do ciclo até o último dia
-// dele, mas nunca depois de hoje (visita futura não existe).
-function limitesDaVisita(cicloInicioIso) {
+// Dias que o campo de data da visita aceita: todo o ciclo para o gerente; para os
+// demais perfis, só até hoje (o backend aplica a mesma regra).
+function limitesDaVisita(cicloInicioIso, gerente) {
   const ultimoDia = new Date(new Date(cicloFimIso(cicloInicioIso)).getTime() - 1).toISOString().slice(0, 10)
   const hoje = hojeLocalIso()
   const min = paraInputDate(cicloInicioIso)
-  const max = ultimoDia < hoje ? ultimoDia : hoje
-  return { min, max, padrao: max }
+  const max = gerente || ultimoDia < hoje ? ultimoDia : hoje
+  const padrao = hoje < min ? min : hoje > max ? max : hoje
+  return { min, max, padrao }
 }
 
 function paraInputDate(isoInstant) {
@@ -307,21 +308,24 @@ function clubView() {
     : null
   const ciclos = assinanteSelecionado ? ciclosDoAssinante(assinanteSelecionado, clube.ciclosAnteriores) : []
   const cicloSelecionado = ciclos.some((ciclo) => ciclo.inicio === clube.cicloSelecionado) ? clube.cicloSelecionado : ''
-  const limites = cicloSelecionado ? limitesDaVisita(cicloSelecionado) : null
+  const gerente = activeRole() === 'GERENTE'
+  const limites = cicloSelecionado ? limitesDaVisita(cicloSelecionado, gerente) : null
+  // No ciclo vigente qualquer perfil registra visitas; encerrados e agendados só o gerente.
+  const podeRegistrarVisita = Boolean(cicloSelecionado) && (gerente || statusDoCiclo(cicloSelecionado) === 'vigente')
   const atendimentosDoCiclo = cicloSelecionado
     ? clube.atendimentos.filter((item) => estaNoCiclo(item.dataHora, cicloSelecionado))
     : clube.atendimentos
 
   return `
     <header class="page-heading">
-      <div><p class="eyebrow">Rateio real</p><h1>Gestão do Clube</h1><p>Escolha o assinante, registre quem atendeu, e veja quanto cada barbeiro deve receber.</p>
+      <h1>Gestão do Clube</h1><p>Escolha o assinante, registre quem atendeu, e veja quanto cada barbeiro deve receber.</p>
       </div>
     </header>
     <section class="club-layout">
       <div class="panel share-form">
         <div class="form-grid">
           <div class="section-title" style="margin: 0 0 12px;">
-            <div><h3>Assinante do clube</h3></div>
+            <div><h3>Escolha uma</h3></div>
           </div>
           <label>
             <select id="assinante-select">
@@ -388,9 +392,9 @@ function clubView() {
           <div class="section-title">
             <div><h3>Atendimentos${assinanteSelecionado ? ` de ${escapeHtml(assinanteSelecionado.nome)}` : ''}</h3><p>${cicloSelecionado ? `Ciclo ${statusDoCiclo(cicloSelecionado)} de ${formatarDataCurta(cicloSelecionado)} – ${formatarDataCurta(cicloFimIso(cicloSelecionado))}: só as visitas dele entram no cálculo.` : 'Selecione um ciclo na linha do tempo.'}</p></div>
           </div>
-          ${cicloSelecionado && statusDoCiclo(cicloSelecionado) === 'agendado' ? `
-            <p class="empty-state">Ciclo agendado — as visitas poderão ser registradas a partir de ${formatarDataCurta(cicloSelecionado)}.</p>
-          ` : cicloSelecionado ? `
+          ${cicloSelecionado && !podeRegistrarVisita ? `
+            <p class="empty-state">Apenas o gerente pode registrar visitas em ciclos encerrados ou agendados.</p>
+          ` : podeRegistrarVisita ? `
             <form id="novo-atendimento-form" class="attendance-row visit-form">
               <label>Barbeiro que atendeu
                 <select name="barbeiroId" required>
