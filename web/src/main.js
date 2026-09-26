@@ -274,10 +274,13 @@ function clubView() {
     <section class="club-layout">
       <div class="panel share-form">
         <div class="panel__heading">
-          <div><p class="eyebrow">Assinante</p><h2>Quem foi atendido?</h2></div>
+          <div><p class="eyebrow">Assinante</p><h2>Seleção do clube</h2></div>
         </div>
         <div class="form-grid">
-          <label>Assinante do clube
+          <div class="section-title" style="margin: 0 0 12px;">
+            <div><h3>Assinante do clube</h3></div>
+          </div>
+          <label>
             <select id="assinante-select">
               <option value="">Selecione um assinante…</option>
               <option value="todos" ${assinanteId === 'todos' ? 'selected' : ''}>Todos os assinantes já atendidos</option>
@@ -319,6 +322,11 @@ function clubView() {
           <div class="divider"></div>
           <div class="section-title">
             <div><h3>Linha do tempo de ciclos</h3><p>Toda vez que o início do ciclo muda, o período anterior fica guardado aqui.</p></div>
+            ${activeRole() === 'GERENTE' ? `
+              <button type="button" class="button button--secondary button--small" data-action="reiniciar-ciclo" data-assinante-id="${assinanteSelecionado.id}">
+                Excluir ciclo atual
+              </button>
+            ` : ''}
           </div>
           <div class="cycle-timeline">
             ${clube.ciclosAnteriores.map((ciclo) => `
@@ -559,6 +567,9 @@ function bindEvents() {
     })
     if (action === 'excluir-assinante') button.addEventListener('click', () => {
       handleExcluirAssinante(button.dataset.assinanteId)
+    })
+    if (action === 'reiniciar-ciclo') button.addEventListener('click', () => {
+      handleReiniciarCiclo(button.dataset.assinanteId)
     })
     if (action === 'toggle-menu') button.addEventListener('click', () => {
       document.querySelector('.sidebar')?.classList.toggle('is-open')
@@ -844,6 +855,26 @@ async function handleExcluirAssinante(assinanteId) {
     state.clube.ciclosAnteriores = []
     setToast(`${assinante?.nome || 'Assinante'} excluído.`)
     render()
+  } catch (error) {
+    setToast(error.message, 'error')
+  }
+}
+
+async function handleReiniciarCiclo(assinanteId) {
+  const assinante = state.clube.assinantes.find((item) => item.id === assinanteId)
+  const confirmado = window.confirm(
+    `Reiniciar o ciclo atual de "${assinante?.nome || 'este assinante'}"?\n\nO ciclo vigente será arquivado e um novo ciclo começará agora.`
+  )
+  if (!confirmado) return
+
+  try {
+    const atualizado = await apiFetch(`/api/v1/assinantes/${assinanteId}/ciclo`, { method: 'DELETE' }, state.devSession)
+    const indice = state.clube.assinantes.findIndex((item) => item.id === assinanteId)
+    if (indice >= 0) {
+      state.clube.assinantes[indice] = atualizado
+    }
+    setToast(`${assinante?.nome || 'Ciclo'} reiniciado.`)
+    carregarAtendimentosEDivisao()
   } catch (error) {
     setToast(error.message, 'error')
   }

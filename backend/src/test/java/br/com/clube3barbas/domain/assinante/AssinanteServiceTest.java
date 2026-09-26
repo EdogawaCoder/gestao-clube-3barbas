@@ -67,6 +67,19 @@ class AssinanteServiceTest {
     }
 
     @Test
+    void reiniciaOCicloAtualArquivandoOAnterior() {
+        var assinante = service.cadastrar("Cliente", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"));
+        var cicloAnterior = assinante.cicloInicio();
+
+        var reiniciado = service.reiniciarCiclo(assinante.id());
+
+        assertThat(reiniciado.cicloInicio()).isAfter(cicloAnterior);
+        assertThat(service.listarCiclosAnteriores(assinante.id()))
+                .singleElement()
+                .satisfies(ciclo -> assertThat(ciclo.inicio()).isEqualTo(cicloAnterior));
+    }
+
+    @Test
     void excluiOAssinanteDefinitivamente() {
         var assinante = service.cadastrar("Cliente", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"));
 

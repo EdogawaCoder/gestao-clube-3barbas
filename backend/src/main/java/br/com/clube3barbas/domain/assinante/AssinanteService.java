@@ -87,6 +87,30 @@ public class AssinanteService {
         return historicoCicloRepository.listarPorAssinante(assinanteId);
     }
 
+    /** Reinicia o ciclo vigente, arquivando o início atual antes de começar um novo ciclo. */
+    public Assinante reiniciarCiclo(String id) {
+        var existente = buscarPorId(id);
+        var novoInicio = Instant.now();
+
+        historicoCicloRepository.registrar(new HistoricoCiclo(
+                UUID.randomUUID().toString(),
+                id,
+                existente.cicloInicio(),
+                Instant.now()
+        ));
+
+        var atualizado = new Assinante(
+                existente.id(),
+                existente.nome(),
+                existente.valorPlano(),
+                existente.percentualGerencia(),
+                existente.percentualBarbeiros(),
+                novoInicio,
+                existente.criadoEm()
+        );
+        return repository.salvar(atualizado);
+    }
+
     /**
      * Exclui o assinante definitivamente -- pensado para corrigir cadastros feitos
      * por engano (ex.: duplicados). O historico de atendimentos e de ciclos dele

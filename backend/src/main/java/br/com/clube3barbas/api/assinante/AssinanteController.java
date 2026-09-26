@@ -72,6 +72,12 @@ public class AssinanteController {
         return service.listarCiclosAnteriores(id);
     }
 
+    @DeleteMapping("/{id}/ciclo")
+    @PreAuthorize("hasRole('GERENTE')")
+    public Assinante reiniciarCiclo(@PathVariable String id) {
+        return service.reiniciarCiclo(id);
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('GERENTE', 'ADMINISTRATIVO', 'BARBEIRO')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
