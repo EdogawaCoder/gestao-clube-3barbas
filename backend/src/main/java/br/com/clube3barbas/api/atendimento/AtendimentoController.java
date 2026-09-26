@@ -40,7 +40,7 @@ public class AtendimentoController {
             @PathVariable String assinanteId,
             @Valid @RequestBody NovoAtendimentoRequest request
     ) {
-        return service.registrar(assinanteId, request.barbeiroId());
+        return service.registrar(assinanteId, request.barbeiroId(), request.dataHora());
     }
 
     @DeleteMapping("/{atendimentoId}")

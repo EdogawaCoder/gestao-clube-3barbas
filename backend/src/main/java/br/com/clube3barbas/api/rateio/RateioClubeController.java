@@ -31,8 +31,11 @@ public class RateioClubeController {
 
     @GetMapping("/assinantes/{assinanteId}")
     @PreAuthorize("hasAnyRole('GERENTE', 'ADMINISTRATIVO', 'BARBEIRO')")
-    public ResultadoRateio calcularParaAssinante(@PathVariable String assinanteId) {
-        return rateioClubeService.calcularParaAssinante(assinanteId);
+    public ResultadoRateio calcularParaAssinante(
+            @PathVariable String assinanteId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant cicloInicio
+    ) {
+        return rateioClubeService.calcularParaAssinante(assinanteId, cicloInicio);
     }
 
     @GetMapping("/geral")

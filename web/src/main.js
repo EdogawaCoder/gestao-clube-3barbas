@@ -34,6 +34,8 @@ const state = {
     mostrarNovoAssinante: false,
     mostrarNovoBarbeiro: false,
     ciclosAnteriores: [],
+    // Início (ISO) do ciclo escolhido na linha do tempo; vazio = escolher o padrão.
+    cicloSelecionado: '',
     // Fechamento por período (opção "Todos"): por padrão, o mês corrente —
     // mas livre para qualquer janela, para fechar um mês passado, por exemplo.
     periodoInicio: primeiroDiaDoMes(0),
@@ -101,9 +103,47 @@ function cicloFimIso(cicloInicioIso) {
   return fim.toISOString()
 }
 
-function estaNoCicloVigente(dataHoraIso, cicloInicioIso) {
+function estaNoCiclo(dataHoraIso, cicloInicioIso) {
   const t = new Date(dataHoraIso).getTime()
   return t >= new Date(cicloInicioIso).getTime() && t < new Date(cicloFimIso(cicloInicioIso)).getTime()
+}
+
+// O status sai só das datas: um ciclo que ainda não começou é um plano já pago
+// para o futuro (agendado); o vigente é o que contém o dia de hoje.
+function statusDoCiclo(cicloInicioIso, agora = Date.now()) {
+  if (new Date(cicloInicioIso).getTime() > agora) return 'agendado'
+  return agora < new Date(cicloFimIso(cicloInicioIso)).getTime() ? 'vigente' : 'encerrado'
+}
+
+// Todos os ciclos do assinante em ordem cronológica: os do histórico mais o
+// guardado no próprio assinante (atual: true), que é o último definido.
+function ciclosDoAssinante(assinante, ciclosAnteriores) {
+  return [
+    ...ciclosAnteriores.map((ciclo) => ({ id: ciclo.id, inicio: ciclo.inicio, atual: false })),
+    { id: null, inicio: assinante.cicloInicio, atual: true },
+  ].sort((a, b) => new Date(a.inicio) - new Date(b.inicio))
+}
+
+function cicloPadrao(ciclos) {
+  const agora = Date.now()
+  return ciclos.find((ciclo) => statusDoCiclo(ciclo.inicio, agora) === 'vigente')
+    || [...ciclos].reverse().find((ciclo) => statusDoCiclo(ciclo.inicio, agora) === 'encerrado')
+    || ciclos[0]
+}
+
+function hojeLocalIso() {
+  const agora = new Date()
+  return new Date(agora.getTime() - agora.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
+// Dias que o campo de data da visita aceita: de início do ciclo até o último dia
+// dele, mas nunca depois de hoje (visita futura não existe).
+function limitesDaVisita(cicloInicioIso) {
+  const ultimoDia = new Date(new Date(cicloFimIso(cicloInicioIso)).getTime() - 1).toISOString().slice(0, 10)
+  const hoje = hojeLocalIso()
+  const min = paraInputDate(cicloInicioIso)
+  const max = ultimoDia < hoje ? ultimoDia : hoje
+  return { min, max, padrao: max }
 }
 
 function paraInputDate(isoInstant) {
@@ -265,6 +305,12 @@ function clubView() {
   const assinanteSelecionado = assinanteId && assinanteId !== 'todos'
     ? clube.assinantes.find((item) => item.id === assinanteId)
     : null
+  const ciclos = assinanteSelecionado ? ciclosDoAssinante(assinanteSelecionado, clube.ciclosAnteriores) : []
+  const cicloSelecionado = ciclos.some((ciclo) => ciclo.inicio === clube.cicloSelecionado) ? clube.cicloSelecionado : ''
+  const limites = cicloSelecionado ? limitesDaVisita(cicloSelecionado) : null
+  const atendimentosDoCiclo = cicloSelecionado
+    ? clube.atendimentos.filter((item) => estaNoCiclo(item.dataHora, cicloSelecionado))
+    : clube.atendimentos
 
   return `
     <header class="page-heading">
@@ -273,9 +319,6 @@ function clubView() {
     </header>
     <section class="club-layout">
       <div class="panel share-form">
-        <div class="panel__heading">
-          <div><p class="eyebrow">Assinante</p><h2>Seleção do clube</h2></div>
-        </div>
         <div class="form-grid">
           <div class="section-title" style="margin: 0 0 12px;">
             <div><h3>Assinante do clube</h3></div>
@@ -321,44 +364,44 @@ function clubView() {
 
           <div class="divider"></div>
           <div class="section-title">
-            <div><h3>Linha do tempo de ciclos</h3><p>Toda vez que o início do ciclo muda, o período anterior fica guardado aqui.</p></div>
-            ${activeRole() === 'GERENTE' ? `
-              <button type="button" class="button button--secondary button--small" data-action="reiniciar-ciclo" data-assinante-id="${assinanteSelecionado.id}">
-                Excluir ciclo atual
-              </button>
-            ` : ''}
+            <div><h3>Linha do tempo de ciclos</h3><p>Toda vez que o início do ciclo muda, o período anterior fica guardado aqui. Clique em um ciclo para ver as visitas e o rateio dele.</p></div>
           </div>
           <div class="cycle-timeline">
-            ${clube.ciclosAnteriores.map((ciclo) => `
-              <div class="cycle-timeline__item">
-                <span class="status-chip status-chip--out">encerrado</span>
+            ${ciclos.map((ciclo) => {
+              const status = statusDoCiclo(ciclo.inicio)
+              const selecionado = ciclo.inicio === cicloSelecionado
+              const podeRemover = activeRole() === 'GERENTE' && (!ciclo.atual || ciclos.length > 1)
+              return `
+              <div class="cycle-timeline__item ${selecionado ? 'is-selected' : ''}" role="button" tabindex="0" aria-pressed="${selecionado}" data-action="selecionar-ciclo" data-ciclo-inicio="${ciclo.inicio}">
+                <span class="status-chip status-chip--${status}">${status}</span>
                 <strong>${formatarDataCurta(ciclo.inicio)} – ${formatarDataCurta(cicloFimIso(ciclo.inicio))}</strong>
-                ${activeRole() === 'GERENTE' ? `
-                  <button type="button" class="icon-button" data-action="remover-ciclo" data-ciclo-id="${ciclo.id}" aria-label="Remover ciclo" title="Remover este ciclo da linha do tempo">×</button>
+                ${podeRemover ? `
+                  <button type="button" class="icon-button" data-action="${ciclo.atual ? 'remover-ciclo-atual' : 'remover-ciclo'}" data-ciclo-id="${ciclo.id || ''}" data-ciclo-inicio="${ciclo.inicio}" aria-label="Remover ciclo" title="Remover este ciclo da linha do tempo">×</button>
                 ` : ''}
-              </div>
-            `).join('')}
-            <div class="cycle-timeline__item">
-              <span class="status-chip status-chip--in">vigente</span>
-              <strong>${formatarDataCurta(assinanteSelecionado.cicloInicio)} – ${formatarDataCurta(cicloFimIso(assinanteSelecionado.cicloInicio))}</strong>
-            </div>
+              </div>`
+            }).join('')}
           </div>
         ` : ''}
 
         ${assinanteId && assinanteId !== 'todos' ? `
           <div class="divider"></div>
           <div class="section-title">
-            <div><h3>Atendimentos${assinanteSelecionado ? ` de ${escapeHtml(assinanteSelecionado.nome)}` : ''}</h3><p>Só as visitas dentro do ciclo vigente entram no cálculo.</p></div>
+            <div><h3>Atendimentos${assinanteSelecionado ? ` de ${escapeHtml(assinanteSelecionado.nome)}` : ''}</h3><p>${cicloSelecionado ? `Ciclo ${statusDoCiclo(cicloSelecionado)} de ${formatarDataCurta(cicloSelecionado)} – ${formatarDataCurta(cicloFimIso(cicloSelecionado))}: só as visitas dele entram no cálculo.` : 'Selecione um ciclo na linha do tempo.'}</p></div>
           </div>
-          <form id="novo-atendimento-form" class="attendance-row" style="grid-template-columns: 1fr auto;">
-            <label>Barbeiro que atendeu
-              <select name="barbeiroId" required>
-                <option value="">Selecione…</option>
-                ${clube.barbeiros.map((barbeiro) => `<option value="${barbeiro.id}">${escapeHtml(barbeiro.nome)}</option>`).join('')}
-              </select>
-            </label>
-            <button class="button button--primary button--small" type="submit" style="align-self: end;">Registrar visita</button>
-          </form>
+          ${cicloSelecionado && statusDoCiclo(cicloSelecionado) === 'agendado' ? `
+            <p class="empty-state">Ciclo agendado — as visitas poderão ser registradas a partir de ${formatarDataCurta(cicloSelecionado)}.</p>
+          ` : cicloSelecionado ? `
+            <form id="novo-atendimento-form" class="attendance-row visit-form">
+              <label>Barbeiro que atendeu
+                <select name="barbeiroId" required>
+                  <option value="">Selecione…</option>
+                  ${clube.barbeiros.map((barbeiro) => `<option value="${barbeiro.id}">${escapeHtml(barbeiro.nome)}</option>`).join('')}
+                </select>
+              </label>
+              <label>Data<input name="data" type="date" min="${limites.min}" max="${limites.max}" value="${limites.padrao}" required /></label>
+              <button class="button button--primary button--small" type="submit" style="align-self: end;">Registrar visita</button>
+            </form>
+          ` : ''}
 
           <button type="button" class="link-button" data-action="toggle-novo-barbeiro">
             ${clube.mostrarNovoBarbeiro ? '– Cancelar novo barbeiro' : '+ Barbeiro não está na lista? Clique aqui.'}
@@ -370,16 +413,14 @@ function clubView() {
             </form>
           ` : ''}
           <div class="attendance-list" style="margin-top: 16px;">
-            ${clube.atendimentos.map((item) => {
-              const noCiclo = assinanteSelecionado ? estaNoCicloVigente(item.dataHora, assinanteSelecionado.cicloInicio) : true
-              return `
-              <div class="visit-item ${noCiclo ? '' : 'is-fora-do-ciclo'}">
+            ${atendimentosDoCiclo.map((item) => `
+              <div class="visit-item">
                 <div class="avatar">${escapeHtml(item.barbeiroNome).slice(0, 1)}</div>
                 <div><strong>${escapeHtml(item.barbeiroNome)}</strong><small>${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(item.dataHora))}</small></div>
-                <span class="status-chip ${noCiclo ? 'status-chip--in' : 'status-chip--out'}">${noCiclo ? 'no ciclo' : 'fora do ciclo'}</span>
+                <span></span>
                 <button type="button" class="icon-button" data-action="remover-atendimento" data-atendimento-id="${item.id}" aria-label="Remover atendimento" title="Remover atendimento lançado errado">×</button>
-              </div>`
-            }).join('') || '<p class="empty-state">Nenhuma visita registrada ainda para este assinante.</p>'}
+              </div>
+            `).join('') || '<p class="empty-state">Nenhuma visita registrada neste ciclo.</p>'}
           </div>
         ` : ''}
 
@@ -399,6 +440,7 @@ function clubView() {
       <aside class="panel result-panel">
         <div class="panel__heading"><div><p class="eyebrow">Resultado</p><h2>Quanto pagar aos barbeiros</h2></div></div>
         ${assinanteId === 'todos' ? `<p class="tag" style="margin-bottom: 14px;">${formatarDataCurta(deInputDate(clube.periodoInicio))} – ${formatarDataCurta(deInputDate(clube.periodoFim))}</p>` : ''}
+        ${assinanteSelecionado && cicloSelecionado ? `<p class="tag" style="margin-bottom: 14px;">Ciclo ${formatarDataCurta(cicloSelecionado)} – ${formatarDataCurta(cicloFimIso(cicloSelecionado))}</p>` : ''}
         ${clube.calculando
           ? '<div class="result-placeholder"><span class="spinner"></span><p>Calculando…</p></div>'
           : clube.resultado
@@ -528,6 +570,7 @@ function bindEvents() {
 
   document.querySelector('#assinante-select')?.addEventListener('change', (event) => {
     state.clube.assinanteSelecionadoId = event.target.value
+    state.clube.cicloSelecionado = ''
     state.clube.mostrarNovoBarbeiro = false
     render()
     carregarAtendimentosEDivisao()
@@ -571,11 +614,22 @@ function bindEvents() {
     if (action === 'excluir-assinante') button.addEventListener('click', () => {
       handleExcluirAssinante(button.dataset.assinanteId)
     })
-    if (action === 'reiniciar-ciclo') button.addEventListener('click', () => {
-      handleReiniciarCiclo(button.dataset.assinanteId)
-    })
+    if (action === 'selecionar-ciclo') {
+      button.addEventListener('click', (event) => {
+        if (event.target.closest('.icon-button')) return // o × da linha tem ação própria
+        handleSelecionarCiclo(button.dataset.cicloInicio)
+      })
+      button.addEventListener('keydown', (event) => {
+        if (event.target !== button || (event.key !== 'Enter' && event.key !== ' ')) return
+        event.preventDefault()
+        handleSelecionarCiclo(button.dataset.cicloInicio)
+      })
+    }
     if (action === 'remover-ciclo') button.addEventListener('click', () => {
       handleRemoverCiclo(button.dataset.cicloId)
+    })
+    if (action === 'remover-ciclo-atual') button.addEventListener('click', () => {
+      handleRemoverCicloAtual(button.dataset.cicloInicio)
     })
     if (action === 'toggle-menu') button.addEventListener('click', () => {
       document.querySelector('.sidebar')?.classList.toggle('is-open')
@@ -724,11 +778,22 @@ async function carregarAtendimentosEDivisao() {
       const fim = encodeURIComponent(deInputDate(clube.periodoFim))
       resultado = await apiFetch(`/api/v1/rateios/periodo?inicio=${inicio}&fim=${fim}`, {}, state.devSession)
     } else {
-      ;[atendimentos, resultado, ciclosAnteriores] = await Promise.all([
+      // Com um ciclo já escolhido, o rateio vai junto com o resto; se esse ciclo
+      // tiver sumido (removido), recalcula depois com o ciclo padrão.
+      const escolhido = clube.cicloSelecionado
+      const rateioEscolhido = escolhido ? buscarRateio(assinanteId, escolhido).catch(() => null) : null
+      ;[atendimentos, ciclosAnteriores] = await Promise.all([
         apiFetch(`/api/v1/assinantes/${assinanteId}/atendimentos`, {}, state.devSession),
-        apiFetch(`/api/v1/rateios/assinantes/${assinanteId}`, {}, state.devSession),
         apiFetch(`/api/v1/assinantes/${assinanteId}/ciclos`, {}, state.devSession),
       ])
+      if (requisicao !== clubeRequisicaoAtual) return
+      const assinante = clube.assinantes.find((item) => item.id === assinanteId)
+      const ciclos = ciclosDoAssinante(assinante, ciclosAnteriores)
+      const valido = ciclos.some((ciclo) => ciclo.inicio === escolhido)
+      const selecionado = valido ? escolhido : cicloPadrao(ciclos).inicio
+      resultado = (valido && await rateioEscolhido) || await buscarRateio(assinanteId, selecionado)
+      if (requisicao !== clubeRequisicaoAtual) return
+      clube.cicloSelecionado = selecionado
     }
     if (requisicao !== clubeRequisicaoAtual) return // uma seleção mais nova já está em andamento
     clube.atendimentos = atendimentos
@@ -746,6 +811,16 @@ async function carregarAtendimentosEDivisao() {
       render()
     }
   }
+}
+
+function buscarRateio(assinanteId, cicloInicio) {
+  return apiFetch(`/api/v1/rateios/assinantes/${assinanteId}?cicloInicio=${encodeURIComponent(cicloInicio)}`, {}, state.devSession)
+}
+
+function handleSelecionarCiclo(cicloInicio) {
+  if (cicloInicio === state.clube.cicloSelecionado) return
+  state.clube.cicloSelecionado = cicloInicio
+  carregarAtendimentosEDivisao()
 }
 
 async function handleNovoAssinante(event) {
@@ -833,10 +908,20 @@ async function handleNovoAtendimento(event) {
   event.preventDefault()
   const form = new FormData(event.currentTarget)
   const assinanteId = state.clube.assinanteSelecionadoId
+  const ciclo = state.clube.cicloSelecionado
+  const dia = form.get('data')
+  // Hoje: vale o instante atual (o servidor preenche). Outro dia: meio-dia UTC
+  // (mesmo dia no Brasil), ajustado para cair dentro do ciclo escolhido.
+  let dataHora = null
+  if (dia && dia !== hojeLocalIso()) {
+    const inicio = new Date(ciclo).getTime()
+    const fim = new Date(cicloFimIso(ciclo)).getTime()
+    dataHora = new Date(Math.min(Math.max(new Date(`${dia}T12:00:00.000Z`).getTime(), inicio), fim - 1)).toISOString()
+  }
   try {
     await apiFetch(`/api/v1/assinantes/${assinanteId}/atendimentos`, {
       method: 'POST',
-      body: JSON.stringify({ barbeiroId: form.get('barbeiroId') }),
+      body: JSON.stringify({ barbeiroId: form.get('barbeiroId'), dataHora }),
     }, state.devSession)
     setToast('Atendimento registrado.')
     carregarAtendimentosEDivisao()
@@ -866,10 +951,12 @@ async function handleExcluirAssinante(assinanteId) {
   }
 }
 
-async function handleReiniciarCiclo(assinanteId) {
+async function handleRemoverCicloAtual(cicloInicio) {
+  const assinanteId = state.clube.assinanteSelecionadoId
   const assinante = state.clube.assinantes.find((item) => item.id === assinanteId)
+  if (!assinante) return
   const confirmado = window.confirm(
-    `Reiniciar o ciclo atual de "${assinante?.nome || 'este assinante'}"?\n\nO ciclo vigente será arquivado e um novo ciclo começará agora.`
+    `Remover o ciclo ${formatarDataCurta(cicloInicio)} – ${formatarDataCurta(cicloFimIso(cicloInicio))} de "${assinante.nome}"?\n\nO ciclo anterior mais recente volta a ser o último ciclo do assinante. Os atendimentos não são apagados. Essa ação não pode ser desfeita.`
   )
   if (!confirmado) return
 
@@ -879,7 +966,7 @@ async function handleReiniciarCiclo(assinanteId) {
     if (indice >= 0) {
       state.clube.assinantes[indice] = atualizado
     }
-    setToast(`${assinante?.nome || 'Ciclo'} reiniciado.`)
+    setToast('Ciclo removido da linha do tempo.')
     carregarAtendimentosEDivisao()
   } catch (error) {
     setToast(error.message, 'error')

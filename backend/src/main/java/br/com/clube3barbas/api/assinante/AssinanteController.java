@@ -81,8 +81,8 @@ public class AssinanteController {
 
     @DeleteMapping("/{id}/ciclo")
     @PreAuthorize("hasRole('GERENTE')")
-    public Assinante reiniciarCiclo(@PathVariable String id) {
-        return service.reiniciarCiclo(id);
+    public Assinante removerCicloAtual(@PathVariable String id) {
+        return service.removerCicloAtual(id);
     }
 
     @DeleteMapping("/{id}")

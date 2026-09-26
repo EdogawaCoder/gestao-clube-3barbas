@@ -4,12 +4,16 @@ import br.com.clube3barbas.domain.assinante.AssinanteRepository;
 import br.com.clube3barbas.domain.barbeiro.BarbeiroRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 @Service
 public class AtendimentoService {
+
+    /** Folga para diferenca de relogio entre o navegador e o servidor. */
+    private static final Duration TOLERANCIA_RELOGIO = Duration.ofMinutes(5);
 
     private final AtendimentoRepository repository;
     private final AssinanteRepository assinanteRepository;
@@ -29,18 +33,29 @@ public class AtendimentoService {
         return repository.listarPorAssinante(assinanteId);
     }
 
-    public Atendimento registrar(String assinanteId, String barbeiroId) {
+    /**
+     * Registra um atendimento. dataHora permite lancar visitas passadas (ex.: dentro
+     * de um ciclo anterior); se vier nula, vale o instante atual. Datas futuras sao
+     * recusadas -- um ciclo agendado so recebe visitas quando chegar.
+     */
+    public Atendimento registrar(String assinanteId, String barbeiroId, Instant dataHora) {
         assinanteRepository.buscarPorId(assinanteId)
                 .orElseThrow(() -> new IllegalArgumentException("Assinante nao encontrado."));
         var barbeiro = barbeiroRepository.buscarPorId(barbeiroId)
                 .orElseThrow(() -> new IllegalArgumentException("Barbeiro nao encontrado."));
+
+        var agora = Instant.now();
+        var quando = dataHora != null ? dataHora : agora;
+        if (quando.isAfter(agora.plus(TOLERANCIA_RELOGIO))) {
+            throw new IllegalArgumentException("A data do atendimento nao pode estar no futuro.");
+        }
 
         var atendimento = new Atendimento(
                 UUID.randomUUID().toString(),
                 assinanteId,
                 barbeiro.id(),
                 barbeiro.nome(),
-                Instant.now()
+                quando
         );
         return repository.salvar(atendimento);
     }

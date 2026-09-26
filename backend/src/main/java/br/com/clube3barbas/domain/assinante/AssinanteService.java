@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -101,17 +102,16 @@ public class AssinanteService {
         historicoCicloRepository.remover(cicloId);
     }
 
-    /** Reinicia o ciclo vigente, arquivando o início atual antes de começar um novo ciclo. */
-    public Assinante reiniciarCiclo(String id) {
+    /**
+     * Remove o ciclo guardado em Assinante.cicloInicio (o ultimo definido -- vigente
+     * ou agendado). O ciclo mais recente do historico volta a ser o ciclo do
+     * assinante; sem historico nao ha para onde voltar, entao a remocao e recusada.
+     */
+    public Assinante removerCicloAtual(String id) {
         var existente = buscarPorId(id);
-        var novoInicio = Instant.now();
-
-        historicoCicloRepository.registrar(new HistoricoCiclo(
-                UUID.randomUUID().toString(),
-                id,
-                existente.cicloInicio(),
-                Instant.now()
-        ));
+        var anterior = historicoCicloRepository.listarPorAssinante(id).stream()
+                .max(Comparator.comparing(HistoricoCiclo::inicio))
+                .orElseThrow(() -> new IllegalArgumentException("O assinante precisa ter ao menos um ciclo."));
 
         var atualizado = new Assinante(
                 existente.id(),
@@ -119,10 +119,12 @@ public class AssinanteService {
                 existente.valorPlano(),
                 existente.percentualGerencia(),
                 existente.percentualBarbeiros(),
-                novoInicio,
+                anterior.inicio(),
                 existente.criadoEm()
         );
-        return repository.salvar(atualizado);
+        repository.salvar(atualizado);
+        historicoCicloRepository.remover(anterior.id());
+        return atualizado;
     }
 
     /**

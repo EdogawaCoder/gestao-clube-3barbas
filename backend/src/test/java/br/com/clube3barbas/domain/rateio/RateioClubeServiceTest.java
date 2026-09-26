@@ -2,10 +2,12 @@ package br.com.clube3barbas.domain.rateio;
 
 import br.com.clube3barbas.domain.assinante.Assinante;
 import br.com.clube3barbas.domain.assinante.AssinanteRepository;
+import br.com.clube3barbas.domain.assinante.HistoricoCiclo;
 import br.com.clube3barbas.domain.atendimento.Atendimento;
 import br.com.clube3barbas.domain.atendimento.AtendimentoRepository;
 import br.com.clube3barbas.persistence.memoria.MemoriaAssinanteRepository;
 import br.com.clube3barbas.persistence.memoria.MemoriaAtendimentoRepository;
+import br.com.clube3barbas.persistence.memoria.MemoriaHistoricoCicloRepository;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -19,7 +21,8 @@ class RateioClubeServiceTest {
 
     private final AssinanteRepository assinantes = new MemoriaAssinanteRepository();
     private final AtendimentoRepository atendimentos = new MemoriaAtendimentoRepository();
-    private final RateioClubeService service = new RateioClubeService(assinantes, atendimentos, new RateioService());
+    private final MemoriaHistoricoCicloRepository historico = new MemoriaHistoricoCicloRepository();
+    private final RateioClubeService service = new RateioClubeService(assinantes, atendimentos, historico, new RateioService());
 
     @Test
     void entregaTodoOFundoAoUnicoBarbeiroQueAtendeuOAssinante() {
@@ -141,6 +144,29 @@ class RateioClubeServiceTest {
             assertThat(parcela.quantidadeAtendimentos()).isEqualTo(2);
             assertThat(parcela.valor()).isEqualByComparingTo("160.00");
         });
+    }
+
+    @Test
+    void calculaUmCicloAnteriorEscolhidoContandoSoAsVisitasDele() {
+        var cliente = assinantes.salvar(assinante("cliente-1", "Cliente Um"));
+        var cicloAnterior = cliente.cicloInicio().minus(Assinante.DURACAO_CICLO_DIAS, ChronoUnit.DAYS);
+        historico.registrar(new HistoricoCiclo("h1", cliente.id(), cicloAnterior, Instant.now()));
+        atendimentos.salvar(new Atendimento("at-antigo", cliente.id(), "b1", "Barbeiro 1", cicloAnterior.plus(2, ChronoUnit.DAYS)));
+        atendimentos.salvar(atendimento(cliente.id(), "b2", "Barbeiro 2"));
+
+        var resultado = service.calcularParaAssinante(cliente.id(), cicloAnterior);
+
+        assertThat(resultado.parcelas()).singleElement().satisfies(parcela ->
+                assertThat(parcela.barbeiroId()).isEqualTo("b1"));
+    }
+
+    @Test
+    void rejeitaCicloQueNaoPertenceAoAssinante() {
+        var cliente = assinantes.salvar(assinante("cliente-1", "Cliente Um"));
+
+        assertThatThrownBy(() -> service.calcularParaAssinante(cliente.id(), Instant.parse("2020-01-01T00:00:00Z")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Ciclo nao encontrado");
     }
 
     @Test

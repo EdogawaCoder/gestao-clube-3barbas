@@ -67,21 +67,31 @@ class AssinanteServiceTest {
     }
 
     @Test
-    void reiniciaOCicloAtualArquivandoOAnterior() {
-        var cadastrado = service.cadastrar("Cliente", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"));
-        // Ciclo no passado: cadastro e reinicio podem cair no mesmo tick de Instant.now().
-        var cicloAnterior = cadastrado.cicloInicio().minus(10, ChronoUnit.DAYS);
-        var assinante = repository.salvar(new Assinante(
-                cadastrado.id(), cadastrado.nome(), cadastrado.valorPlano(), cadastrado.percentualGerencia(),
-                cadastrado.percentualBarbeiros(), cicloAnterior, cadastrado.criadoEm()
-        ));
+    void removerOCicloAtualVoltaParaOCicloAnteriorMaisRecente() {
+        var assinante = service.cadastrar("Cliente", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"));
+        var cicloUm = assinante.cicloInicio();
+        var cicloDois = cicloUm.plus(30, ChronoUnit.DAYS);
+        var agendado = cicloDois.plus(30, ChronoUnit.DAYS);
+        service.atualizar(assinante.id(), "Cliente", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"), cicloDois);
+        service.atualizar(assinante.id(), "Cliente", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"), agendado);
 
-        var reiniciado = service.reiniciarCiclo(assinante.id());
+        var atualizado = service.removerCicloAtual(assinante.id());
 
-        assertThat(reiniciado.cicloInicio()).isAfter(cicloAnterior);
+        assertThat(atualizado.cicloInicio()).isEqualTo(cicloDois);
+        assertThat(service.buscarPorId(assinante.id()).cicloInicio()).isEqualTo(cicloDois);
         assertThat(service.listarCiclosAnteriores(assinante.id()))
-                .singleElement()
-                .satisfies(ciclo -> assertThat(ciclo.inicio()).isEqualTo(cicloAnterior));
+                .extracting(HistoricoCiclo::inicio)
+                .containsExactly(cicloUm);
+    }
+
+    @Test
+    void recusaRemoverOUnicoCicloDoAssinante() {
+        var assinante = service.cadastrar("Cliente", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"));
+
+        assertThatThrownBy(() -> service.removerCicloAtual(assinante.id()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("ao menos um ciclo");
+        assertThat(service.buscarPorId(assinante.id()).cicloInicio()).isEqualTo(assinante.cicloInicio());
     }
 
     @Test
@@ -104,7 +114,8 @@ class AssinanteServiceTest {
     void rejeitaRemoverCicloDeOutroAssinante() {
         var dono = service.cadastrar("Dono", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"));
         var outro = service.cadastrar("Outro", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"));
-        service.reiniciarCiclo(dono.id());
+        service.atualizar(dono.id(), "Dono", new BigDecimal("200"), new BigDecimal("60"), new BigDecimal("40"),
+                dono.cicloInicio().plus(30, ChronoUnit.DAYS));
         var ciclo = service.listarCiclosAnteriores(dono.id()).get(0);
 
         assertThatThrownBy(() -> service.removerCicloAnterior(outro.id(), ciclo.id()))

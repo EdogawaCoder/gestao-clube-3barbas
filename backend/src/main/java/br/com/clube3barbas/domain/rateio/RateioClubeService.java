@@ -2,6 +2,7 @@ package br.com.clube3barbas.domain.rateio;
 
 import br.com.clube3barbas.domain.assinante.Assinante;
 import br.com.clube3barbas.domain.assinante.AssinanteRepository;
+import br.com.clube3barbas.domain.assinante.HistoricoCicloRepository;
 import br.com.clube3barbas.domain.atendimento.Atendimento;
 import br.com.clube3barbas.domain.atendimento.AtendimentoRepository;
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,25 +34,37 @@ public class RateioClubeService {
 
     private final AssinanteRepository assinanteRepository;
     private final AtendimentoRepository atendimentoRepository;
+    private final HistoricoCicloRepository historicoCicloRepository;
     private final RateioService rateioService;
 
     public RateioClubeService(
             AssinanteRepository assinanteRepository,
             AtendimentoRepository atendimentoRepository,
+            HistoricoCicloRepository historicoCicloRepository,
             RateioService rateioService
     ) {
         this.assinanteRepository = assinanteRepository;
         this.atendimentoRepository = atendimentoRepository;
+        this.historicoCicloRepository = historicoCicloRepository;
         this.rateioService = rateioService;
     }
 
     public ResultadoRateio calcularParaAssinante(String assinanteId) {
+        return calcularParaAssinante(assinanteId, null);
+    }
+
+    /**
+     * Rateio de um ciclo especifico do assinante (o atual, um anterior do historico
+     * ou um agendado). Sem cicloInicio, usa o ciclo atual (Assinante.cicloInicio).
+     * So conta as visitas daquela janela de 30 dias.
+     */
+    public ResultadoRateio calcularParaAssinante(String assinanteId, Instant cicloInicio) {
         var assinante = assinanteRepository.buscarPorId(assinanteId)
                 .orElseThrow(() -> new IllegalArgumentException("Assinante nao encontrado."));
-        // So conta o que aconteceu dentro do ciclo vigente (os 30 dias atuais da
-        // assinatura) -- visitas de ciclos anteriores nao entram no fechamento deste.
+        var inicio = cicloInicio == null ? assinante.cicloInicio() : cicloDoAssinante(assinante, cicloInicio);
+        var fim = inicio.plus(Assinante.DURACAO_CICLO_DIAS, ChronoUnit.DAYS);
         var atendimentos = atendimentoRepository.listarPorAssinante(assinanteId).stream()
-                .filter(atendimento -> assinante.dentroDoCicloVigente(atendimento.dataHora()))
+                .filter(atendimento -> !atendimento.dataHora().isBefore(inicio) && atendimento.dataHora().isBefore(fim))
                 .map(atendimento -> new AtendimentoRateio(atendimento.barbeiroId(), atendimento.barbeiroNome()))
                 .toList();
 
@@ -60,6 +74,16 @@ public class RateioClubeService {
                 assinante.percentualBarbeiros(),
                 atendimentos
         );
+    }
+
+    private Instant cicloDoAssinante(Assinante assinante, Instant cicloInicio) {
+        var existe = assinante.cicloInicio().equals(cicloInicio)
+                || historicoCicloRepository.listarPorAssinante(assinante.id()).stream()
+                        .anyMatch(ciclo -> ciclo.inicio().equals(cicloInicio));
+        if (!existe) {
+            throw new IllegalArgumentException("Ciclo nao encontrado para este assinante.");
+        }
+        return cicloInicio;
     }
 
     /** Soma o ciclo vigente de cada assinante -- "quanto devo agora", por assinante. */
