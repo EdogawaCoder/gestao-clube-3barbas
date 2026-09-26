@@ -268,20 +268,13 @@ function clubView() {
 
   return `
     <header class="page-heading">
-      <div><p class="eyebrow">Rateio real</p><h1>Gestão do Clube</h1><p>Escolha o assinante, registre quem atendeu, e veja quanto cada barbeiro deve receber.</p></div>
-      ${assinanteSelecionado ? `
-        <div class="cycle-pill">
-          <div>
-            <span>Ciclo vigente</span>
-            <strong>${formatarDataCurta(assinanteSelecionado.cicloInicio)} – ${formatarDataCurta(cicloFimIso(assinanteSelecionado.cicloInicio))}</strong>
-          </div>
-        </div>
-      ` : ''}
+      <div><p class="eyebrow">Rateio real</p><h1>Gestão do Clube</h1><p>Escolha o assinante, registre quem atendeu, e veja quanto cada barbeiro deve receber.</p>
+      </div>
     </header>
     <section class="club-layout">
       <div class="panel share-form">
         <div class="panel__heading">
-          <div><p class="eyebrow">Assinante</p><h2>Quem foi atendido</h2></div>
+          <div><p class="eyebrow">Assinante</p><h2>Quem foi atendido?</h2></div>
         </div>
         <div class="form-grid">
           <label>Assinante do clube
